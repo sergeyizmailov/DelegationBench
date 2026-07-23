@@ -4,13 +4,16 @@ DelegationBench is an early open-source security project. The roadmap separates
 the reproducible baseline available today from the validation and integration
 work needed for a stable release.
 
-## Current baseline — v0.4.0
+## Current baseline — v0.4.4
 
 - Deterministic runner, authorization oracle, delegation-envelope reference
   defense, and authority-aware fuzzer.
 - 75 scenarios: 38 attacks and 37 benign twins covering V1–V7.
+- The reviewed corpus ships in the PyPI wheel and source distribution.
 - Terminal, JSON, JUnit, SARIF, and versioned benchmark reports.
 - Composite GitHub Action and one-command CI integration.
+- SARIF findings map to OWASP Agentic Top 10, CWE, and MITRE ATLAS.
+- OpenSSF Scorecard, release provenance attestations, and SPDX SBOM generation.
 - LangGraph adapter with compiled-graph integration tests, explicit principal
   propagation, custom handoffs, task scope, and parallel-delegation
   correlation.
@@ -45,9 +48,9 @@ work needed for a stable release.
 
 ## Stable release
 
-- Publish the package through PyPI Trusted Publishing.
+- Migrate PyPI releases from API tokens to Trusted Publishing.
 - Stabilize the scenario and trace schemas with migration guidance.
-- Publish signed or provenance-attested release artifacts.
+- Maintain provenance-attested release artifacts and versioned SBOMs.
 - Document supported framework versions and adapter compatibility.
 - Tag v1.0 after downstream reproduction and corpus review.
 
