@@ -3,15 +3,23 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/sergeyizmailov/delegationbench/actions/workflows/delegationbench.yml"><img src="https://github.com/sergeyizmailov/delegationbench/actions/workflows/delegationbench.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/sergeyizmailov/delegationbench/actions/workflows/delegationbench.yml"><img src="https://github.com/sergeyizmailov/delegationbench/actions/workflows/delegationbench.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/sergeyizmailov/delegationbench/security/code-scanning"><img src="https://github.com/sergeyizmailov/delegationbench/actions/workflows/github-code-scanning/codeql/badge.svg" alt="CodeQL"></a>
+  <a href="https://github.com/sergeyizmailov/delegationbench/releases/latest"><img src="https://img.shields.io/github/v/release/sergeyizmailov/delegationbench" alt="Latest release"></a>
   <a href="https://github.com/sergeyizmailov/delegationbench/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
-  <img src="https://img.shields.io/badge/python-%E2%89%A53.10-3776AB.svg" alt="Python ≥ 3.10">
-  <a href="https://github.com/sergeyizmailov/delegationbench/releases"><img src="https://img.shields.io/github/v/release/sergeyizmailov/delegationbench" alt="Latest release"></a>
+</p>
+
+<p align="center">
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="THREAT_MODEL.md">Threat model</a> ·
+  <a href="docs/validation-kit.md">Validation kit</a> ·
+  <a href="ROADMAP.md">Roadmap</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
 # DelegationBench
 
-Open crash tests for privilege escalation across AI agent handoffs.
+Open crash tests for authority escalation across AI agent handoffs.
 
 DelegationBench is a security testbed that detects when a low-authority agent
 causes a higher-authority agent to perform an action the originating user never
@@ -26,11 +34,25 @@ effective_authority(child_task) = user_grant ∩ parent_authority ∩ child_scop
 
 Authority may shrink along a delegation chain. It must never expand implicitly.
 
+> [!NOTE]
+> DelegationBench is a research preview with a deterministic synthetic runtime.
+> It is designed to make authority failures reproducible—not to claim production
+> coverage for every agent framework. See [What DelegationBench is not](#what-delegationbench-is-not).
+
 ## Install
 
+Install the current release directly from GitHub:
+
 ```bash
-pip install delegationbench        # once published
-# or from source:
+python -m pip install \
+  "delegationbench @ git+https://github.com/sergeyizmailov/delegationbench.git@v0.1.0"
+```
+
+Or install an editable checkout for development:
+
+```bash
+git clone https://github.com/sergeyizmailov/delegationbench.git
+cd delegationbench
 pip install -e .
 ```
 
@@ -66,7 +88,17 @@ delegationbench run scenarios/ --defense envelope
 ```
 
 Exit code is 0 when every scenario matches its `expect` contract — drop it
-straight into CI (see `.github/workflows/delegationbench.yml`).
+straight into CI (see the [project workflow](.github/workflows/delegationbench.yml)).
+
+## At a glance
+
+| | DelegationBench |
+|---|---|
+| **Tests** | Cross-agent authority propagation, confused-deputy behavior, delegation depth, expiry/replay, origin continuity, and result-driven scope widening |
+| **Corpus** | 15 attack scenarios + 10 benign lookalikes |
+| **Judge** | Deterministic authorization oracle; no LLM judge |
+| **Defense baseline** | Tool-boundary delegation envelopes with optional HMAC integrity |
+| **Outputs** | Human-readable terminal reports and machine-readable JSON |
 
 ## What you get
 
@@ -96,6 +128,26 @@ straight into CI (see `.github/workflows/delegationbench.yml`).
 - **Reports** — terminal (human) and `--format json` (machine) with per-scenario
   verdicts, full traces, and corpus metrics: Unauthorized Action Rate, Attack
   Containment Rate, Benign Task Success Rate.
+
+## How it works
+
+```mermaid
+flowchart LR
+    U["User grant"] --> A["Root agent"]
+    X["Untrusted content"] --> A
+    A -->|"delegates scoped task"| B["Child agent"]
+    B -->|"requests action"| T["Mock tool boundary"]
+    U --> O["Deterministic oracle"]
+    A -->|"execution trace"| O
+    B -->|"execution trace"| O
+    T -->|"execution trace"| O
+    O -->|"PASS or violation V1–V6"| R["Reproducible report"]
+```
+
+The runner records delegation and tool events. The oracle reconstructs effective
+authority from the originating grant and the delegation chain, then reports the
+exact invariant violation and path. The optional envelope defense applies the
+same attenuation rule before a mock tool can execute.
 
 ## Scenario example
 
@@ -171,7 +223,9 @@ delegationbench run scenarios/ --defense envelope
 Contributions welcome — new attack scenarios are the best first contribution.
 See [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), and the
 [threat model](THREAT_MODEL.md). Security issues: [SECURITY.md](SECURITY.md)
-(private reporting, please). If you use DelegationBench in research, see
+(private reporting, please). For questions, use [GitHub
+Discussions](https://github.com/sergeyizmailov/delegationbench/discussions) or
+see [SUPPORT.md](SUPPORT.md). If you use DelegationBench in research, see
 [CITATION.cff](CITATION.cff).
 
 ## License
