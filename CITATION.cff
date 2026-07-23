@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this software in your research, please cite it as below."
+type: software
+title: "DelegationBench: Open crash tests for privilege escalation across AI agent handoffs"
+version: 0.1.0
+date-released: 2026-07-23
+url: "https://github.com/sergeyizmailov/delegationbench"
+repository-code: "https://github.com/sergeyizmailov/delegationbench"
+license: Apache-2.0
+authors:
+  - name: "sergeyizmailov"
+keywords:
+  - agent security
+  - privilege escalation
+  - multi-agent systems
+  - delegation
+  - confused deputy
+  - red teaming
+  - fuzzing
+abstract: >-
+  DelegationBench is an open-source security testbed and fuzzer for detecting
+  privilege escalation across AI-agent delegation chains. A deterministic
+  authorization oracle judges whether authority expanded beyond the originating
+  user's grant across recursive agent handoffs — no LLM judge involved.

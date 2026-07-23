@@ -6,10 +6,36 @@ build-backend = "setuptools.build_meta"
 name = "delegationbench"
 version = "0.1.0"
 description = "Open crash tests for privilege escalation across AI-agent delegation chains"
-readme = "PROJECT_PLAN.md"
+readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
+license-files = ["LICENSE"]
+authors = [{name = "sergeyizmailov"}]
+keywords = ["agent-security", "llm-security", "multi-agent", "red-teaming",
+            "privilege-escalation", "confused-deputy", "fuzzing", "benchmark"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Testing",
+]
 dependencies = ["PyYAML>=6.0"]
+
+[project.urls]
+Homepage = "https://github.com/sergeyizmailov/delegationbench"
+Repository = "https://github.com/sergeyizmailov/delegationbench"
+Issues = "https://github.com/sergeyizmailov/delegationbench/issues"
+Changelog = "https://github.com/sergeyizmailov/delegationbench/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 # Optional framework adapter. Targets the LangGraph 1.x /

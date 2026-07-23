@@ -1,0 +1,42 @@
+name: Bug report
+description: Oracle misjudgment, defense bypass, runner or CLI failure
+title: "[bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting. For **security vulnerabilities** use private reporting instead (Security → Advisories).
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Oracle misjudgment (wrong verdict)
+        - Defense bypass (unauthorized action executed with --defense envelope)
+        - Scenario corpus (scenario does not match its expect contract)
+        - Fuzzer
+        - Adapter (ROMA / LangGraph)
+        - CLI / packaging
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Scenario file or fuzz seed, command you ran, expected vs actual verdict
+      placeholder: |
+        delegationbench run scenarios/attacks/attack-008-malicious-document.yaml
+        Expected: ... Actual: ...
+    validations:
+      required: true
+  - type: textarea
+    id: trace
+    attributes:
+      label: Trace / output
+      description: Paste the terminal output or attach the JSON report (--format json)
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "delegationbench --version output or commit SHA"

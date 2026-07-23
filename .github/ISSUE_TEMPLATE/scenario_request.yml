@@ -1,0 +1,34 @@
+name: New attack or benign scenario
+description: Propose a delegation-chain scenario for the corpus
+title: "[scenario] "
+labels: [enhancement, scenario]
+body:
+  - type: markdown
+    attributes:
+      value: Scenarios must test **authority propagation across a delegation chain** — see THREAT_MODEL.md. Generic prompt injection without a delegation edge is out of scope.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Violation class
+      options:
+        - V1 authority expansion on handoff
+        - V2 confused deputy
+        - V3 depth violation
+        - V4 expired / replayed delegation
+        - V5 origin loss
+        - V6 scope widening via child result
+        - Benign lookalike (no violation)
+    validations:
+      required: true
+  - type: textarea
+    id: mechanism
+    attributes:
+      label: Attack mechanism
+      description: Delegation topology, where the injected instruction lives, which action escapes the root grant
+    validations:
+      required: true
+  - type: textarea
+    id: benign-twin
+    attributes:
+      label: Benign twin
+      description: What is the legitimate lookalike that must stay clean? (Required for attacks.)

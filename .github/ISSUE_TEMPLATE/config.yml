@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & ideas
+    url: https://github.com/sergeyizmailov/delegationbench/discussions
+    about: Open-ended questions, adapter ideas, integration discussions — please use Discussions.
+  - name: Security vulnerability
+    url: https://github.com/sergeyizmailov/delegationbench/security/advisories/new
+    about: Report security issues privately — do NOT open a public issue.

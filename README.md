@@ -1,3 +1,14 @@
+<p align="center">
+  <img src=".github/assets/banner.png" alt="DelegationBench — open crash tests for privilege escalation across AI agent handoffs" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/sergeyizmailov/delegationbench/actions/workflows/delegationbench.yml"><img src="https://github.com/sergeyizmailov/delegationbench/actions/workflows/delegationbench.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/sergeyizmailov/delegationbench/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+  <img src="https://img.shields.io/badge/python-%E2%89%A53.10-3776AB.svg" alt="Python ≥ 3.10">
+  <a href="https://github.com/sergeyizmailov/delegationbench/releases"><img src="https://img.shields.io/github/v/release/sergeyizmailov/delegationbench" alt="Latest release"></a>
+</p>
+
 # DelegationBench
 
 Open crash tests for privilege escalation across AI agent handoffs.
@@ -156,6 +167,12 @@ python -m pytest tests/ -q
 delegationbench run scenarios/
 delegationbench run scenarios/ --defense envelope
 ```
+
+Contributions welcome — new attack scenarios are the best first contribution.
+See [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), and the
+[threat model](THREAT_MODEL.md). Security issues: [SECURITY.md](SECURITY.md)
+(private reporting, please). If you use DelegationBench in research, see
+[CITATION.cff](CITATION.cff).
 
 ## License
 
