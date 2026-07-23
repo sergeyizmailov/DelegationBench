@@ -48,7 +48,8 @@ work needed for a stable release.
 
 ## Stable release
 
-- Migrate PyPI releases from API tokens to Trusted Publishing.
+- Complete the one-time PyPI Trusted Publisher binding for the tokenless
+  release workflow.
 - Stabilize the scenario and trace schemas with migration guidance.
 - Maintain provenance-attested release artifacts and versioned SBOMs.
 - Document supported framework versions and adapter compatibility.
