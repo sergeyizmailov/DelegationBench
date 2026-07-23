@@ -7,10 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-23
+
+### Changed
+
+- Published the package distribution through PyPI.
+- Updated installation and CI examples to the current release.
+- Kept public release documentation focused on the project and its technical
+  evidence.
+
 ## [0.4.1] - 2026-07-23
 
-Hardening release driven by a final pre-grant adversarial review
-(`docs/reviews/final-review-2026-07-23.md`). No scenario verdict changed.
+Hardening release driven by a final adversarial review. No scenario verdict
+changed.
 
 ### Security
 
@@ -208,7 +217,8 @@ Initial public release.
 - **CI** — GitHub Actions: pytest plus full corpus runs with and without the
   reference defense, on Python 3.10/3.12/3.13.
 
-[Unreleased]: https://github.com/sergeyizmailov/delegationbench/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/sergeyizmailov/delegationbench/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.2
 [0.4.1]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.1
 [0.4.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.0
 [0.3.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.3.0

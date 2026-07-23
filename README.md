@@ -46,11 +46,10 @@ Authority may shrink along a delegation chain. It must never expand implicitly.
 
 ## Install
 
-Install the current release directly from GitHub:
+Install the current release from PyPI:
 
 ```bash
-python -m pip install \
-  "delegationbench @ git+https://github.com/sergeyizmailov/DelegationBench.git@v0.4.0"
+python -m pip install delegationbench
 ```
 
 Or install an editable checkout for development:
