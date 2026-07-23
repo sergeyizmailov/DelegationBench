@@ -360,3 +360,208 @@ def test_self_delegation_rejected(tmp_path):
         "actions: [docs.read], args: {}}")
     with pytest.raises(ScenarioError, match="self-delegation"):
         load_scenario(write(tmp_path, bad))
+
+
+# -- optional capture groups in templates (review FIX 2) ------------------------
+
+
+def test_template_referencing_optional_group_rejected(tmp_path):
+    """A template referencing a group that does not participate in
+    every match would crash mid-run with a KeyError; the loader must
+    reject it instead."""
+    bad = VALID.replace(
+        "rules: []",
+        "rules:\n      - match: 'PAY(?::(?P<payee>\\S+))?'\n"
+        "        then: {return: 'paid ${payee}'}")
+    with pytest.raises(ScenarioError, match="optional capture group"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_template_referencing_alternation_only_group_rejected(tmp_path):
+    bad = VALID.replace(
+        "rules: []",
+        "rules:\n      - match: '(?:(?P<opt>x)|y)'\n"
+        "        then: {return: '${opt}'}")
+    with pytest.raises(ScenarioError, match="optional capture group"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_template_referencing_star_group_rejected(tmp_path):
+    bad = VALID.replace(
+        "rules: []",
+        "rules:\n      - match: '(?P<opt>x)*done'\n"
+        "        then: {return: '${opt}'}")
+    with pytest.raises(ScenarioError, match="optional capture group"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_template_mandatory_groups_still_load(tmp_path):
+    """Groups that always participate — plain, quantified with min >= 1,
+    or inside a mandatory lookahead — stay valid template sources."""
+    text = VALID.replace(
+        "rules: []",
+        "rules:\n"
+        "      - match: 'PAY:(?P<payee>\\S+):(?P<amount>\\d+)'\n"
+        "        then: {return: '${payee} ${amount}'}\n"
+        "      - match: 'REP:(?P<rep>ab)+'\n"
+        "        then: {return: '${rep}'}\n"
+        "      - match: '(?=(?P<look>LUCK))LUCK'\n"
+        "        then: {return: '${look}'}")
+    scn = load_scenario(write(tmp_path, text))
+    assert len(scn.agents["reader"].rules) == 3
+
+
+# -- non-mapping YAML nodes (review FIX 2) --------------------------------------
+
+
+def test_agent_spec_must_be_mapping(tmp_path):
+    bad = VALID.replace(
+        "  reader:\n    capabilities: [docs.read]\n    rules: []",
+        "  reader: 'just a string'")
+    with pytest.raises(ScenarioError, match="agents.reader"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_resources_store_must_be_mapping(tmp_path):
+    bad = VALID.replace('    d1: "hello"', "    [a, b]")
+    with pytest.raises(ScenarioError, match="resources.docs"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_resources_must_be_mapping(tmp_path):
+    bad = VALID.replace("resources:\n  docs:\n    d1: \"hello\"",
+                        "resources: [docs]")
+    with pytest.raises(ScenarioError, match="resources"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_then_must_be_mapping(tmp_path):
+    bad = VALID.replace(
+        "rules: []",
+        "rules:\n      - match: 'hello'\n        then: 'return'")
+    with pytest.raises(ScenarioError, match="then"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_rule_must_be_mapping(tmp_path):
+    bad = VALID.replace(
+        "rules: []",
+        "rules:\n      - 'just a string'")
+    with pytest.raises(ScenarioError, match=r"rules\[0\]"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_rules_must_be_list(tmp_path):
+    bad = VALID.replace("    rules: []", "    rules: 'nope'")
+    with pytest.raises(ScenarioError, match="rules"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_match_must_be_string(tmp_path):
+    bad = VALID.replace(
+        "rules: []",
+        "rules:\n      - match: 42\n        then: {return: 'x'}")
+    with pytest.raises(ScenarioError, match="match"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_grant_must_be_mapping(tmp_path):
+    bad = VALID.replace(
+        "grant:\n  allowed_actions: [docs.read]\n"
+        "  max_delegation_depth: 1\n  ttl_seconds: null",
+        "grant: 42")
+    with pytest.raises(ScenarioError, match="grant"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_task_must_be_mapping(tmp_path):
+    bad = VALID.replace(
+        "task:\n  agent: reader\n  read: [d1]\n"
+        "  description: \"read a doc\"",
+        "task: 'nope'")
+    with pytest.raises(ScenarioError, match="task"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_task_read_must_be_list(tmp_path):
+    bad = VALID.replace("  read: [d1]", "  read: d1")
+    with pytest.raises(ScenarioError, match="task.read"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_expect_must_be_mapping(tmp_path):
+    bad = VALID + "\nexpect: 'clean'\n"
+    with pytest.raises(ScenarioError, match="expect"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_tool_args_must_be_mapping(tmp_path):
+    bad = VALID.replace(
+        "rules: []",
+        "rules:\n      - match: 'go'\n"
+        "        then: {tool: {action: docs.read, args: [doc_id]}}")
+    with pytest.raises(ScenarioError, match="args"):
+        load_scenario(write(tmp_path, bad))
+
+
+# -- numeric field robustness (review FIX 2) -------------------------------------
+
+
+def test_ttl_seconds_rejects_bool_nan_inf(tmp_path):
+    for value in ("yes", ".nan", ".inf", "-.inf"):
+        bad = VALID.replace("ttl_seconds: null", f"ttl_seconds: {value}")
+        with pytest.raises(ScenarioError, match="ttl_seconds"):
+            load_scenario(write(tmp_path, bad))
+
+
+def test_max_delegation_depth_rejects_bool(tmp_path):
+    bad = VALID.replace("max_delegation_depth: 1",
+                        "max_delegation_depth: yes")
+    with pytest.raises(ScenarioError, match="max_delegation_depth"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_advance_clock_rejects_bool_nan_inf(tmp_path):
+    for value in ("yes", ".nan", ".inf"):
+        bad = VALID.replace(
+            "rules: []",
+            f"rules:\n      - match: 'go'\n"
+            f"        advance_clock: {value}\n"
+            "        then: {return: 'x'}")
+        with pytest.raises(ScenarioError, match="advance_clock"):
+            load_scenario(write(tmp_path, bad))
+
+
+def test_advance_clock_accepts_valid_numbers(tmp_path):
+    text = VALID.replace(
+        "rules: []",
+        "rules:\n      - match: 'go'\n"
+        "        advance_clock: 1.5\n"
+        "        then: {return: 'x'}")
+    scn = load_scenario(write(tmp_path, text))
+    assert scn.agents["reader"].rules[0].advance_clock == 1.5
+
+
+# -- root task.read validated at load (review FIX 2) -----------------------------
+
+
+def test_task_read_requires_root_capability(tmp_path):
+    bad = VALID.replace("capabilities: [docs.read]", "capabilities: []")
+    with pytest.raises(ScenarioError, match="task.read"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_task_read_requires_grant(tmp_path):
+    bad = VALID.replace("allowed_actions: [docs.read]",
+                        "allowed_actions: [email.read]")
+    bad = bad.replace("capabilities: [docs.read]",
+                      "capabilities: [docs.read, email.read]")
+    with pytest.raises(ScenarioError, match="task.read"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_empty_task_read_needs_no_capability(tmp_path):
+    text = VALID.replace("  read: [d1]", "  read: []")
+    text = text.replace("capabilities: [docs.read]", "capabilities: []")
+    scn = load_scenario(write(tmp_path, text))
+    assert scn.task.read == []

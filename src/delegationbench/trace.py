@@ -73,11 +73,11 @@ class Trace:
         self.events: list[Event] = []
 
     def _append(self, event: Event) -> None:
-        self.events.append(event)
-        if len(self.events) > self.max_events:
+        if len(self.events) >= self.max_events:
             raise RunLimitExceeded(
                 f"trace exceeded {self.max_events} events; "
                 "aborting runaway delegation")
+        self.events.append(event)
 
     def delegation(self, parent_task: str | None, task_id: str, agent: str,
                    scope, *, depth: int, nonce: str,

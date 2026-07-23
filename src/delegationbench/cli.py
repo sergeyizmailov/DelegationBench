@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -66,19 +67,28 @@ def _emit(data, *, output: str | None, text: bool = False) -> None:
 
 
 def _machine_output(args: argparse.Namespace, reports: list[dict],
-                    metrics: dict, paths: dict[str, str]):
+                    metrics: dict, paths: dict[str, str],
+                    errors: list[dict] = ()):
     if args.format == "json":
-        return {"metrics": metrics, "reports": reports}, False
+        data = {"metrics": metrics, "reports": reports}
+        if errors:
+            # Errored files must not vanish from machine output either.
+            data["errors"] = errors
+        return data, False
     if args.format == "junit":
-        return reports_to_junit(reports), True
+        return reports_to_junit(reports, errors=errors), True
     if args.format == "sarif":
-        return reports_to_sarif(reports, paths), False
+        return reports_to_sarif(reports, paths, errors=errors), False
     return None, False
 
 
 def _write_benchmark_report(args: argparse.Namespace, reports: list[dict],
                             metrics: dict) -> None:
     if not args.benchmark_report:
+        return
+    if not reports:
+        print(f"warning: no scenario reports; benchmark report "
+              f"{args.benchmark_report} not written", file=sys.stderr)
         return
     document = benchmark_document(
         reports,
@@ -107,14 +117,19 @@ def _cmd_run(args: argparse.Namespace) -> int:
         reports: list[dict] = []
         paths: dict[str, str] = {}
         rows: list[dict] = []
-        had_error = False
+        errors: list[dict] = []
         for f in files:
             try:
                 report = _run_one(f, args.defense)
             except (ScenarioError, ToolError, RunLimitExceeded,
                     EngineError) as e:
                 print(f"error: {e}", file=sys.stderr)
-                had_error = True
+                # Errored files must surface in machine reports (JUnit
+                # <error> testcase, SARIF scenario-load-error result,
+                # JSON "errors" list) — a CI job archiving the report
+                # must see the failure, not an all-green suite.
+                errors.append({"file": str(f), "error": str(e),
+                               "type": type(e).__name__})
                 continue
             reports.append(report)
             paths[report["scenario"]["id"]] = str(f)
@@ -127,7 +142,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
                          "outcome": report.get("defense_outcome", "-"),
                          "ok": ok})
         metrics = compute_metrics(reports)
-        machine, is_text = _machine_output(args, reports, metrics, paths)
+        machine, is_text = _machine_output(args, reports, metrics, paths,
+                                           errors)
         if machine is not None:
             _emit(machine, output=args.output, text=is_text)
         else:
@@ -138,7 +154,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             )
             _emit(rendered, output=args.output, text=True)
         _write_benchmark_report(args, reports, metrics)
-        if had_error:
+        if errors:
             return EXIT_ERROR
         return EXIT_MATCH if all(r["ok"] for r in rows) else EXIT_MISMATCH
 
@@ -147,6 +163,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
     except (ScenarioError, ToolError, RunLimitExceeded,
             EngineError) as e:
         print(f"error: {e}", file=sys.stderr)
+        errors = [{"file": str(target), "error": str(e),
+                   "type": type(e).__name__}]
+        machine, is_text = _machine_output(args, [], {}, {}, errors)
+        if machine is not None:
+            _emit(machine, output=args.output, text=is_text)
+        _write_benchmark_report(args, [], {})
         return EXIT_ERROR
     reports = [report]
     metrics = compute_metrics(reports)
@@ -180,6 +202,9 @@ def _cmd_fuzz(args: argparse.Namespace) -> int:
         return EXIT_ERROR
     print(render_campaign_summary(report))
     print(f"Campaign report: {Path(args.out) / 'campaign.json'}")
+    if args.fail_on_bypass and report["counts"]["bypass"]:
+        # CI gating: any defense-bypass finding fails the job.
+        return EXIT_MISMATCH
     return EXIT_MATCH
 
 
@@ -233,6 +258,10 @@ def build_parser() -> argparse.ArgumentParser:
                       default=True,
                       help="minimize findings and emit regression scenarios "
                            "(default: on; disable with --no-minimize)")
+    fuzz.add_argument("--fail-on-bypass", action="store_true",
+                      help="exit 1 when the campaign finds any defense "
+                           "bypass (for CI gating; default: exit 0 "
+                           "regardless of findings)")
     fuzz.set_defaults(func=_cmd_fuzz)
     return parser
 
@@ -240,7 +269,19 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except BrokenPipeError:
+        # stdout's reader went away (e.g. `--format json | head`):
+        # exit quietly with code 1, no traceback. Redirecting stdout to
+        # devnull prevents the interpreter's shutdown flush from
+        # re-raising and printing "Exception ignored ...".
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+        except (AttributeError, OSError, ValueError):
+            pass
+        return EXIT_MISMATCH
 
 
 if __name__ == "__main__":

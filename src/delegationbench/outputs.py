@@ -38,16 +38,25 @@ def _report_ok(report: dict) -> bool:
 
 
 def reports_to_junit(reports: Iterable[dict],
-                     suite_name: str = "DelegationBench") -> str:
-    """Return JUnit XML for a set of scenario reports."""
+                     suite_name: str = "DelegationBench",
+                     errors: Iterable[dict] = ()) -> str:
+    """Return JUnit XML for a set of scenario reports.
+
+    ``errors`` carries per-file load/run failures (dicts with ``file``,
+    ``error`` and ``type`` keys): each becomes an ``<error>`` testcase
+    whose classname derives from the file name, so a CI job archiving
+    the JUnit sees the failure instead of an all-green suite that
+    silently dropped the broken file.
+    """
     reports = list(reports)
+    errors = list(errors)
     failures = sum(not _report_ok(report) for report in reports)
     suite = ET.Element(
         "testsuite",
         name=suite_name,
-        tests=str(len(reports)),
+        tests=str(len(reports) + len(errors)),
         failures=str(failures),
-        errors="0",
+        errors=str(len(errors)),
         skipped="0",
     )
     for report in reports:
@@ -71,6 +80,15 @@ def reports_to_junit(reports: Iterable[dict],
             failure.text = "\n".join(report.get("reasons") or [])
         output = ET.SubElement(case, "system-out")
         output.text = json.dumps(report, sort_keys=True)
+    for err in errors:
+        stem = Path(str(err.get("file", "unknown"))).stem
+        case = ET.SubElement(suite, "testcase", classname=stem,
+                             name=f"{stem} (load/run error)")
+        error = ET.SubElement(
+            case, "error",
+            type=str(err.get("type", "ScenarioError")),
+            message=str(err.get("error", "")))
+        error.text = str(err.get("error", ""))
     ET.indent(suite)
     return ET.tostring(suite, encoding="unicode", xml_declaration=True)
 
@@ -86,14 +104,19 @@ def _fingerprint(report: dict, kind: str) -> str:
 
 
 def reports_to_sarif(reports: Iterable[dict],
-                     paths: dict[str, str] | None = None) -> dict:
+                     paths: dict[str, str] | None = None,
+                     errors: Iterable[dict] = ()) -> dict:
     """Return GitHub-compatible SARIF 2.1.0.
 
     One result is emitted per violation kind. Clean expected scenarios do
     not become alerts. Stable fingerprints prevent duplicate alerts across
-    repeated CI runs.
+    repeated CI runs. Per-file load/run failures (``errors``, same shape
+    as in :func:`reports_to_junit`) become ``scenario-load-error``
+    results at level ``error``, so a broken scenario file surfaces in
+    code scanning instead of vanishing from the report.
     """
     paths = paths or {}
+    errors = list(errors)
     results: list[dict[str, Any]] = []
     for report in reports:
         if report.get("verdict") != "violation":
@@ -131,6 +154,25 @@ def reports_to_sarif(reports: Iterable[dict],
                     "delegationPath": report.get("delegation_path") or [],
                 },
             })
+    for err in errors:
+        uri = str(err.get("file", "unknown"))
+        message = (f"{err.get('type', 'Error')}: "
+                   f"{err.get('error', '')}")
+        results.append({
+            "ruleId": "scenario-load-error",
+            "level": "error",
+            "message": {"text": message},
+            "locations": [{
+                "physicalLocation": {
+                    "artifactLocation": {"uri": uri},
+                    "region": {"startLine": 1},
+                },
+            }],
+            "partialFingerprints": {
+                "delegationbench/v1": hashlib.sha256(
+                    f"{uri}\0{message}".encode("utf-8")).hexdigest(),
+            },
+        })
     rules = [{
         "id": kind,
         "name": f"DelegationBench-{kind}",
@@ -141,6 +183,18 @@ def reports_to_sarif(reports: Iterable[dict],
         ),
         "defaultConfiguration": {"level": "error"},
     } for kind in ALL_KINDS]
+    if errors:
+        rules.append({
+            "id": "scenario-load-error",
+            "name": "DelegationBench-scenario-load-error",
+            "shortDescription": {
+                "text": "Scenario file failed to load or run",
+            },
+            "helpUri": (
+                "https://github.com/sergeyizmailov/DelegationBench"
+            ),
+            "defaultConfiguration": {"level": "error"},
+        })
     return {
         "$schema": (
             "https://json.schemastore.org/sarif-2.1.0.json"

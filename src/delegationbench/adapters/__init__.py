@@ -69,9 +69,13 @@ stamps it from the events: the root task takes the root agent run's
 ``principal`` (falling back to ``grant["principal"]``), each delegation
 inherits its parent task's principal unless the delegation event carries
 its own, and tool events inherit their task's principal unless the event
-carries one. Events without any principal in sight are stamped ``""``
-(unknown). When the grant declares a principal, the oracle fails closed
-and reports unknown identity as V5 origin loss.
+carries one. A FALSY principal (missing, ``None``, or an explicit empty
+string) always means "absent — inherit" — an explicit ``""`` never
+overrides an inherited identity, matching the documented ROMA-adapter
+semantics (``"" = unknown; child events inherit``). Events without any
+principal in sight are stamped ``""`` (unknown). When the grant declares
+a principal, the oracle fails closed and reports unknown identity as V5
+origin loss.
 
 Two event representations coexist in this package:
 
@@ -243,7 +247,7 @@ def build_trace(events: Iterable[NeutralEvent], grant: dict) -> Trace:
                 principal = (ev.get("principal")
                              or grant.get("principal") or "")
                 args: dict = {}
-                if ev.get("principal") is not None:
+                if ev.get("principal"):
                     args["principal"] = ev["principal"]
                 trace.delegation(
                     None, rid, ev.get("agent", "?"), grant_actions, depth=0,
@@ -303,8 +307,8 @@ def build_trace(events: Iterable[NeutralEvent], grant: dict) -> Trace:
                      else scope_of_task.get(parent_task, grant_actions))
             depth = depth_of_task.get(parent_task, -1) + 1
             expires = expires_of_task.get(parent_task)
-            principal = (ev["principal"] if "principal" in ev
-                         else principal_of_task.get(parent_task, ""))
+            principal = (ev.get("principal")
+                         or principal_of_task.get(parent_task, ""))
             trace.delegation(
                 parent_task, task_id, dest, scope, depth=depth,
                 nonce=f"adapter-{seq}", expires_at=expires,
@@ -327,8 +331,8 @@ def build_trace(events: Iterable[NeutralEvent], grant: dict) -> Trace:
             agent = (agent_of_run.get(agent_run) if agent_run else None) \
                 or ev.get("agent") or "?"
             action = ev.get("tool", "?")
-            principal = (ev["principal"] if "principal" in ev
-                         else principal_of_task.get(task_id, ""))
+            principal = (ev.get("principal")
+                         or principal_of_task.get(task_id, ""))
             trace.tool_call(task_id, agent, action, ev.get("args") or {},
                             source=ev.get("source", "user"),
                             principal=principal,
@@ -364,9 +368,8 @@ def build_trace(events: Iterable[NeutralEvent], grant: dict) -> Trace:
             trace.tool_result(info["task_id"], info["agent"],
                               info["action"], result,
                               source=ev.get("source", "user"),
-                              principal=(ev["principal"]
-                                         if "principal" in ev
-                                         else info["principal"]))
+                              principal=(ev.get("principal")
+                                         or info["principal"]))
     return trace
 
 

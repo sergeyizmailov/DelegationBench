@@ -70,10 +70,71 @@ def test_execute_requires_payment_limit_config():
         execute(tools, 10)
 
 
-def test_payment_limit_must_be_integer():
-    tools, _ = make_tools(config={"payment_limit": "lots"})
+def test_non_integer_payment_limit_is_a_graceful_refusal():
+    """payment_limit rewritten mid-run to a non-integer (e.g. via
+    admin.config.update): the execute is refused with an error result —
+    no uncaught ToolError, no payment recorded — consistent with the
+    over-limit path."""
+    tools, _ = make_tools(config={"payment_limit": "100"})
+    tools.config["payment_limit"] = "lots"  # what a mid-run update can do
+    result = json.loads(execute(tools, 10))
+    assert result["status"] == "error"
+    assert "integer" in result["error"]
+    assert tools.payments == []
+
+
+# -- payment amount validation (review FIX 3) ------------------------------------
+
+
+def test_execute_non_positive_amount_refused():
+    """A zero or negative payment is nonsense for the mock: refused
+    with an error result, not recorded."""
+    tools, _ = make_tools(config={"payment_limit": "1000"})
+    for amount in ("0", "-50"):
+        result = json.loads(execute(tools, amount))
+        assert result["status"] == "error"
+        assert "positive" in result["error"]
+    assert tools.payments == []
+
+
+def test_prepare_non_positive_amount_refused():
+    tools, _ = make_tools(config={"payment_limit": "1000"})
+    for amount in ("0", "-50"):
+        result = json.loads(tools.call(
+            PAYER, make_env(), "payment.prepare",
+            {"payee": "v", "amount": amount}, "user"))
+        assert result["status"] == "error"
+        assert "positive" in result["error"]
+    assert tools.payments == []
+
+
+def test_execute_amount_must_be_integer():
+    tools, _ = make_tools(config={"payment_limit": "100"})
     with pytest.raises(ToolError, match="integer"):
-        execute(tools, 10)
+        execute(tools, "lots")
+
+
+# -- generated email ids vs seeded ids (review FIX 3) -----------------------------
+
+MAILER = Agent(name="mailer",
+               capabilities=frozenset({"email.draft", "email.send"}))
+
+
+def test_generated_email_ids_never_overwrite_seeded():
+    """A scenario-seeded email id (e.g. draft-1) must not collide with
+    the generated-id counter: generated ids skip occupied slots."""
+    trace = Trace()
+    tools = Tools(trace, emails={"draft-1": "seeded draft",
+                                 "sent-1": "seeded sent"})
+    r1 = tools.call(MAILER, make_env(), "email.draft",
+                    {"to": "a@b", "subject": "s", "body": "b"}, "user")
+    assert r1 == "drafted email draft-2"
+    assert tools.emails["draft-1"] == "seeded draft"
+    r2 = tools.call(MAILER, make_env(), "email.send",
+                    {"to": "a@b", "subject": "s", "body": "b"}, "user")
+    assert r2 == "sent email sent-3"  # counter shared with draft-2
+    assert tools.emails["sent-1"] == "seeded sent"
+    assert tools.emails["sent-3"].startswith("To: a@b")
 
 
 def test_prepare_is_not_limited():

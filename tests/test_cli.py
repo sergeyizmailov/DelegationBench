@@ -120,3 +120,105 @@ task:
     captured = capsys.readouterr()
     assert "chain budget" in captured.err
     assert "Traceback" not in captured.err
+
+
+# -- errored files surface in machine reports (review FIX 1) --------------------
+
+
+def _mixed_dir(tmp_path):
+    """A directory with one valid and one broken scenario."""
+    good = tmp_path / "good.yaml"
+    good.write_text(BENIGN.read_text())
+    broken = tmp_path / "broken-thing.yaml"
+    broken.write_text("schema: 2\n")
+    return tmp_path
+
+
+def test_directory_junit_contains_error_testcase(tmp_path, capsys):
+    """Directory mode: a broken file must appear as an <error> testcase
+    (classname from the file name) — not silently dropped from the
+    JUnit while the exit code says 2."""
+    import xml.etree.ElementTree as ET
+    assert main(["run", str(_mixed_dir(tmp_path)),
+                 "--format", "junit"]) == 2
+    root = ET.fromstring(capsys.readouterr().out)
+    assert root.attrib["errors"] == "1"
+    error_cases = [c for c in root.findall(".//testcase")
+                   if c.find("error") is not None]
+    assert len(error_cases) == 1
+    assert error_cases[0].attrib["classname"] == "broken-thing"
+    assert error_cases[0].find("error").attrib["type"] == "ScenarioError"
+
+
+def test_directory_sarif_contains_load_error_result(tmp_path, capsys):
+    assert main(["run", str(_mixed_dir(tmp_path)),
+                 "--format", "sarif"]) == 2
+    sarif = json.loads(capsys.readouterr().out)
+    results = sarif["runs"][0]["results"]
+    load_errors = [r for r in results
+                   if r["ruleId"] == "scenario-load-error"]
+    assert len(load_errors) == 1
+    assert load_errors[0]["level"] == "error"
+    assert load_errors[0]["locations"][0]["physicalLocation"][
+        "artifactLocation"]["uri"].endswith("broken-thing.yaml")
+
+
+def test_directory_json_lists_errors(tmp_path, capsys):
+    assert main(["run", str(_mixed_dir(tmp_path)),
+                 "--format", "json"]) == 2
+    data = json.loads(capsys.readouterr().out)
+    assert len(data["reports"]) == 1
+    assert len(data["errors"]) == 1
+    assert data["errors"][0]["file"].endswith("broken-thing.yaml")
+    assert data["errors"][0]["type"] == "ScenarioError"
+
+
+def test_benchmark_report_written_despite_directory_errors(tmp_path,
+                                                           capsys):
+    """--benchmark-report is written whenever any reports exist, even
+    when some files errored (exit 2)."""
+    out = tmp_path / "bench.json"
+    assert main(["run", str(_mixed_dir(tmp_path)),
+                 "--benchmark-report", str(out)]) == 2
+    assert out.is_file()
+    document = json.loads(out.read_text())
+    assert len(document["reports"]) == 1
+
+
+def test_benchmark_report_warns_when_nothing_ran(tmp_path, capsys):
+    """Single-file error path: no reports exist, so the benchmark
+    report is not written — but a clear warning is emitted."""
+    broken = tmp_path / "broken.yaml"
+    broken.write_text("schema: 2\n")
+    out = tmp_path / "bench.json"
+    assert main(["run", str(broken),
+                 "--benchmark-report", str(out)]) == 2
+    assert not out.exists()
+    assert "benchmark report" in capsys.readouterr().err
+
+
+def test_single_file_junit_error_testcase(tmp_path, capsys):
+    """Single-file mode with --format junit on a broken file also
+    emits the <error> testcase instead of nothing."""
+    import xml.etree.ElementTree as ET
+    broken = tmp_path / "broken-one.yaml"
+    broken.write_text("schema: 2\n")
+    assert main(["run", str(broken), "--format", "junit"]) == 2
+    root = ET.fromstring(capsys.readouterr().out)
+    assert root.attrib["errors"] == "1"
+    case = root.findall(".//testcase")[0]
+    assert case.attrib["classname"] == "broken-one"
+
+
+def test_broken_pipe_exits_quietly(tmp_path, capsys, monkeypatch):
+    """`--format json | head`: a closed stdout must exit with code 1
+    and no traceback (standard SIGPIPE handling)."""
+    class ClosedPipe:
+        def write(self, *_args, **_kwargs):
+            raise BrokenPipeError
+
+        def flush(self):
+            pass
+
+    monkeypatch.setattr("sys.stdout", ClosedPipe())
+    assert main(["run", str(ATTACK), "--format", "json"]) == 1

@@ -117,7 +117,9 @@ class DelegationBenchCallback(_AsyncCallbackHandler):
     handoff_prefixes:
         Tool-name prefixes that mark a delegation handoff. Default:
         ``("transfer_to_", "delegate_to_")``. The langgraph-supervisor
-        ``__handoff_destination`` metadata key is always honored.
+        ``__handoff_destination`` metadata key is always honored. Pass an
+        empty tuple to disable naming-convention detection entirely
+        (only the metadata key and explicit ``handoffs`` are honored).
     action_map:
         Application-supplied mapping from framework tool names to
         canonical grant actions, e.g. ``{"read_doc": "docs.read",
@@ -148,9 +150,21 @@ class DelegationBenchCallback(_AsyncCallbackHandler):
                  handoffs: dict[str, str | dict] | None = None) -> None:
         self.agents = set(agents) if agents is not None else None
         self.principal_keys = tuple(principal_keys or self.PRINCIPAL_KEYS)
-        self.handoff_prefixes = tuple(handoff_prefixes
-                                      or self.HANDOFF_PREFIXES)
+        # Explicit empty means "disabled": only None falls back to the
+        # default conventions.
+        self.handoff_prefixes = (
+            self.HANDOFF_PREFIXES if handoff_prefixes is None
+            else tuple(handoff_prefixes))
         self.action_map = dict(action_map or {})
+        for tool_name, action in self.action_map.items():
+            if not isinstance(tool_name, str) or not tool_name:
+                raise TypeError(
+                    f"action_map keys must be non-empty tool-name "
+                    f"strings, got {tool_name!r}")
+            if not isinstance(action, str) or not action:
+                raise TypeError(
+                    f"action_map[{tool_name!r}] must be a non-empty "
+                    f"canonical action id string, got {action!r}")
         self.handoffs = dict(handoffs or {})
         self.events: list[NeutralEvent] = []
         self._agent_of_run: dict[str, str] = {}

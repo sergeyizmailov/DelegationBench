@@ -80,6 +80,50 @@ def test_sarif_omits_clean_scenarios():
     assert sarif["runs"][0]["results"] == []
 
 
+def test_junit_marks_errored_files_as_errors():
+    """A file that failed to load/run becomes an <error> testcase
+    (classname from the file name) instead of vanishing from the suite,
+    so a CI job archiving the JUnit sees the failure."""
+    xml = reports_to_junit(
+        [report()],
+        errors=[{"file": "scenarios/attacks/broken-thing.yaml",
+                 "error": "unsupported schema 2", "type": "ScenarioError"}])
+    root = ET.fromstring(xml)
+    assert root.attrib["tests"] == "2"
+    assert root.attrib["errors"] == "1"
+    assert root.attrib["failures"] == "0"
+    cases = root.findall(".//testcase")
+    error_case = next(c for c in cases if c.find("error") is not None)
+    assert error_case.attrib["classname"] == "broken-thing"
+    error = error_case.find("error")
+    assert error.attrib["type"] == "ScenarioError"
+    assert "unsupported schema 2" in error.attrib["message"]
+
+
+def test_sarif_reports_errored_files_as_results():
+    """Errored files surface as scenario-load-error results at level
+    error; the rule is only declared when errors exist."""
+    sarif = reports_to_sarif(
+        [report()],
+        errors=[{"file": "scenarios/broken.yaml",
+                 "error": "invalid YAML", "type": "ScenarioError"}])
+    run = sarif["runs"][0]
+    load_errors = [r for r in run["results"]
+                   if r["ruleId"] == "scenario-load-error"]
+    assert len(load_errors) == 1
+    assert load_errors[0]["level"] == "error"
+    assert "ScenarioError" in load_errors[0]["message"]["text"]
+    assert load_errors[0]["locations"][0]["physicalLocation"][
+        "artifactLocation"]["uri"] == "scenarios/broken.yaml"
+    assert any(rule["id"] == "scenario-load-error"
+               for rule in run["tool"]["driver"]["rules"])
+    # No errors -> no extra rule (rule set stays V1..V7).
+    clean = reports_to_sarif([report()])
+    assert {rule["id"] for rule in
+            clean["runs"][0]["tool"]["driver"]["rules"]} == {
+        "V1", "V2", "V3", "V4", "V5", "V6", "V7"}
+
+
 def test_benchmark_document_and_json_writer(tmp_path):
     document = benchmark_document(
         [report()],

@@ -482,3 +482,53 @@ def test_all_attack_seeds_campaign_smoke(tmp_path):
         assert report["valid"] + report["invalid"] + report["duplicates"] \
             + report["errors"] == report["mutants_run"], path.name
         assert (out / "campaign.json").is_file()
+
+
+# -- seed dedup + --fail-on-bypass (review FIX 5) ---------------------------------
+
+
+def test_noop_mutant_counts_as_duplicate_not_valid(tmp_path, monkeypatch):
+    """The seed itself is in the dedup set: a mutant identical to the
+    seed (a no-op mutation) carries no signal beyond the seed run and
+    must not count as a valid mutant."""
+    monkeypatch.setattr(fuzzer, "OPERATORS",
+                        {"noop": lambda data, rng: data})
+    report = run_campaign(ATTACK, budget=5, seed=1, defense="envelope",
+                          out=tmp_path / "out", minimize=False)
+    assert report["mutants_run"] == 5
+    assert report["valid"] == 0
+    assert report["duplicates"] == 5
+
+
+def _campaign_report(bypass):
+    return {
+        "seed": {"id": "attack-008", "path": "seed.yaml"},
+        "defense": "envelope",
+        "budget": 10,
+        "random_seed": 1,
+        "mutants_run": 10,
+        "valid": 10,
+        "invalid": 0,
+        "duplicates": 0,
+        "errors": 0,
+        "counts": {"bypass": bypass, "divergent": 0,
+                   "neutral": 10 - bypass, "dead": 0},
+        "findings": [],
+        "wall_time_seconds": 0.0,
+    }
+
+
+def test_fail_on_bypass_gates_exit_code(tmp_path, capsys, monkeypatch):
+    """--fail-on-bypass: exit 1 when the campaign found any defense
+    bypass (CI gating); the default stays exit 0."""
+    import delegationbench.cli as cli
+    monkeypatch.setattr(cli, "run_campaign",
+                        lambda *a, **kw: _campaign_report(bypass=2))
+    seed = tmp_path / "seed.yaml"
+    seed.write_text(ATTACK.read_text())
+    assert main(["fuzz", str(seed), "--fail-on-bypass"]) == 1
+    assert main(["fuzz", str(seed)]) == 0
+    monkeypatch.setattr(cli, "run_campaign",
+                        lambda *a, **kw: _campaign_report(bypass=0))
+    assert main(["fuzz", str(seed), "--fail-on-bypass"]) == 0
+    capsys.readouterr()

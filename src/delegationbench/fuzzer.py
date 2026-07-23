@@ -918,7 +918,10 @@ def run_campaign(seed_path: str | Path, budget: int = 200, seed: int = 1,
     seed_data = yaml.safe_load(seed_path.read_text(encoding="utf-8"))
     rng = random.Random(seed)
 
-    seen: set[str] = set()
+    # The seed itself is in the dedup set: a no-op mutant (one whose
+    # operators changed nothing) must count as a duplicate, not a valid
+    # mutant — it carries no signal beyond the seed run.
+    seen: set[str] = {yaml.safe_dump(seed_data, sort_keys=True)}
     counts = {"bypass": 0, "divergent": 0, "neutral": 0, "dead": 0}
     valid = invalid = duplicates = errors = run = 0
     findings: list[dict] = []

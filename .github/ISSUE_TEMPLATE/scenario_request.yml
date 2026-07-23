@@ -17,6 +17,7 @@ body:
         - V4 expired / replayed delegation
         - V5 origin loss
         - V6 scope widening via child result
+        - V7 principal substitution
         - Benign lookalike (no violation)
     validations:
       required: true

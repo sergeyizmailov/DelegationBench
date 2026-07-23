@@ -421,3 +421,75 @@ def test_action_map_does_not_rewrite_handoff_tool_names():
     delegation = next(e for e in handler.events
                       if e["type"] == "delegation")
     assert delegation["tool"] == "transfer_to_payment"
+
+
+# -- construction-time validation + prefix disabling (review FIX 5) --------------
+
+
+def test_action_map_values_validated_at_construction():
+    import pytest
+    with pytest.raises(TypeError, match="action_map"):
+        make_handler(action_map={"read_doc": None})
+    with pytest.raises(TypeError, match="action_map"):
+        make_handler(action_map={"read_doc": 42})
+    with pytest.raises(TypeError, match="action_map"):
+        make_handler(action_map={"read_doc": ""})
+    # A valid mapping still constructs fine.
+    assert make_handler(action_map=ACTION_MAP).action_map == ACTION_MAP
+
+
+def test_empty_handoff_prefixes_disable_convention_detection():
+    """handoff_prefixes=() is explicit: naming-convention detection is
+    off, so a transfer_to_* tool is an ordinary tool call, not a
+    delegation (the `or` bug used to restore the defaults)."""
+    handler = make_handler(handoff_prefixes=())
+
+    async def flow():
+        await handler.on_chain_start(
+            {}, {}, run_id="r-root", parent_run_id=None,
+            metadata={"langgraph_node": "reader"})
+        await handler.on_tool_start(
+            {"name": "transfer_to_payment"}, "pay", run_id="t-1",
+            parent_run_id="r-root",
+            metadata={"langgraph_node": "reader"}, inputs={})
+
+    drive(flow)
+    assert handler.events[-1]["type"] == "tool_call"
+    # None still falls back to the default conventions.
+    default = make_handler(handoff_prefixes=None)
+    assert default.handoff_prefixes == ("transfer_to_", "delegate_to_")
+
+
+# -- principal stamping: falsy means inherit (review FIX 4) ----------------------
+
+
+def test_empty_string_principal_inherits_parent():
+    """An explicit "" principal on a delegation or tool event is treated
+    as ABSENT (inherit the parent task's principal), matching the
+    documented ROMA semantics — it never overrides the inherited
+    identity with ""."""
+    handler = make_handler()
+    drive(attack_008_events(handler))
+    for e in handler.events:
+        if e["type"] in ("delegation", "tool_call", "tool_result"):
+            e["principal"] = ""
+    trace = build_trace(handler.events, GRANT)
+    assert trace.events
+    for e in trace.events:
+        assert e.principal == "user-123", (e.kind, e.task_id)
+    verdict = run_oracle(trace, dict(GRANT))
+    assert "V7" not in verdict.kinds
+
+
+def test_non_empty_principal_still_overrides():
+    """A non-empty explicit principal keeps its override semantics."""
+    handler = make_handler()
+    drive(attack_008_events(handler))
+    for e in handler.events:
+        if e["type"] == "delegation":
+            e["principal"] = "attacker"
+    trace = build_trace(handler.events, GRANT)
+    stamped = {e.principal for e in trace.events}
+    assert "attacker" in stamped
+    verdict = run_oracle(trace, GRANT)
+    assert "V7" in verdict.kinds

@@ -141,6 +141,9 @@ examples](docs/ci-integration.md)).
       --budget 200 --seed 7 --defense envelope --out fuzz-output/
   ```
 
+  Add `--fail-on-bypass` to exit 1 when the campaign finds any defense
+  bypass (CI gating; the default stays exit 0 regardless of findings).
+
 - **Reports** — terminal, JSON, JUnit, SARIF, and self-describing versioned
   benchmark reports with per-scenario verdicts, full traces, and corpus
   metrics: Unauthorized Action Rate, Attack Containment Rate, Benign Task

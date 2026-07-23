@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-23
+
+Hardening release driven by a final pre-grant adversarial review
+(`docs/reviews/final-review-2026-07-23.md`). No scenario verdict changed.
+
+### Security
+
+- **Renewal widening closed** — re-delegating an existing task id now compares
+  the new scope/expiry against the task's *prior* effective authority in both
+  the oracle (V1) and `EnvelopeGuard` (blocked). Previously a same-task
+  re-delegation with a wider (still parent-bounded) scope silently expanded
+  authority.
+- **`EnvelopeGuard` keeps its own authority map** — delegations under parents
+  the guard never approved are rejected (V5); child envelopes whose carried
+  fields contradict guard-derived authority/depth/expiry are rejected even
+  without signing; tool calls are judged against derived authority and the
+  calling agent is checked against the task's delegated agent.
+- **`unauthorized_executed` is no longer content-gameable** — refusal detection
+  parses the result payload structurally and matches results per call instead
+  of pooling; unprovable refusals count conservatively as executed.
+- **Errored scenarios surface in CI reports** — JUnit emits `<error>` testcases
+  and SARIF emits `scenario-load-error` results instead of silently dropping
+  broken files.
+- Default HMAC signing key now emits a runtime warning.
+
+### Fixed
+
+- Loader: optional capture groups referenced by templates, non-mapping YAML
+  nodes, NaN/Inf/bool in numeric fields, and root `task.read` capability/grant
+  mismatches are rejected at load with `ScenarioError` (was: mid-run crashes).
+- Tools: non-positive payment amounts rejected; mid-run `payment_limit`
+  tampering to a non-integer degrades gracefully; generated email ids no longer
+  overwrite seeded ones.
+- Adapters: empty-string principal inherits (unified across both build_trace
+  paths); `action_map` values validated; `handoff_prefixes=()` respected.
+- CLI: broken-pipe exits cleanly; `--benchmark-report` written on all error
+  paths; `fuzz --fail-on-bypass` flag for CI gating; fuzzer dedups no-op
+  mutants; trace event cap off-by-one; V7 added to the scenario issue template.
+- Nonce replay model aligned between oracle and guard ((principal, nonce),
+  empty nonces exempt).
+
 ## [0.4.0] - 2026-07-23
 
 ### Added
@@ -167,7 +208,8 @@ Initial public release.
 - **CI** — GitHub Actions: pytest plus full corpus runs with and without the
   reference defense, on Python 3.10/3.12/3.13.
 
-[Unreleased]: https://github.com/sergeyizmailov/delegationbench/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/sergeyizmailov/delegationbench/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.1
 [0.4.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.0
 [0.3.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.3.0
 [0.2.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.2.0

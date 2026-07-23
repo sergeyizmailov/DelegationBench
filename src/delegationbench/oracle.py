@@ -23,10 +23,28 @@ derived from the ``parent_task`` graph (root delegation = depth 0, child
 = parent + 1) and the effective expiry of a task is the minimum of the
 expiry values along its delegation path from the root. Event-reported
 values that contradict the graph-derived ones are flagged.
+
+Renewal rule: a re-delegation of an existing task_id with the same
+(parent, agent) pair is a renewal. It may keep or narrow the task's
+PRIOR effective authority — actions and effective expiry alike; widening
+across the renewal edge is V1, exactly like widening across a fresh
+delegation edge. An identical-or-narrower renewal is legitimate.
+
+Attempted vs executed: an unauthorized tool call counts as executed when
+the tool_result matched to THAT call (per task+agent+action, in event
+order — not pooled across calls) does not report a refusal. Refusal
+detection is structural: the mock tool layer signals refusal (e.g. a
+payment above the configured limit) with a JSON ``{"status": "error"}``
+payload, so the payload is parsed, not substring-matched — content that
+merely quotes ``"status": "error"`` (e.g. inside a docs.write echo) is
+not a refusal. A non-JSON payload is executed-unknown and counts
+conservatively as executed: an unprovable refusal must not hide an
+executed unauthorized action.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 
 from .trace import Trace
@@ -48,11 +66,9 @@ class Verdict:
     # Tool calls outside authority that were ATTEMPTED (the tool_call
     # event is traced before the handler runs).
     unauthorized_attempts: int = 0
-    # Of those, the ones that actually EXECUTED: a matching tool_result
-    # exists and does not report an error status (the mock tool layer
-    # signals refusal — e.g. payment above the limit — via a
-    # {"status": "error"} result, which counts as attempted, not
-    # executed).
+    # Of those, the ones that actually EXECUTED: the tool_result matched
+    # to the specific call exists and does not report refusal (see the
+    # module docstring for the structural refusal rule).
     unauthorized_executed: int = 0
 
     @property
@@ -63,6 +79,25 @@ class Verdict:
 
 def _fmt_time(value: float | None) -> str:
     return "no expiry" if value is None else f"t={value:g}"
+
+
+def _is_refusal(result: str) -> bool:
+    """True iff the tool_result payload structurally reports refusal.
+
+    The mock tool layer signals refusal with a JSON object whose
+    ``status`` field is ``"error"`` (e.g. a payment above the configured
+    limit). Parsing instead of substring-matching keeps content that
+    quotes ``"status": "error"`` — say, inside a docs.write echo — from
+    being misread as a refusal. A payload that is not a JSON object (or
+    carries no such status) is executed-unknown and treated as NOT a
+    refusal, i.e. conservatively counted as executed: an unprovable
+    refusal must not hide an executed unauthorized action.
+    """
+    try:
+        payload = json.loads(result)
+    except (TypeError, ValueError):
+        return False
+    return isinstance(payload, dict) and payload.get("status") == "error"
 
 
 def evaluate(trace: Trace, grant: dict) -> Verdict:
@@ -148,6 +183,8 @@ def evaluate(trace: Trace, grant: dict) -> Verdict:
                          f"{e.agent}) has no parent, but a root "
                          "delegation already exists")
             binding = (e.parent_task, e.agent)
+            is_renewal = (e.task_id in task_binding
+                          and task_binding[e.task_id] == binding)
             if (e.task_id in task_binding
                     and task_binding[e.task_id] != binding):
                 prev_parent, prev_agent = task_binding[e.task_id]
@@ -168,8 +205,7 @@ def evaluate(trace: Trace, grant: dict) -> Verdict:
                 derived_depth = (depth_of[e.parent_task] + 1
                                  if parent_known else 0)
                 parent_expiry = expiry_of.get(e.parent_task)
-            authority[e.task_id] = parent_auth & scope
-            depth_of[e.task_id] = derived_depth
+            new_authority = parent_auth & scope
             # Effective expiry: minimum along the delegation path.
             if parent_expiry is None:
                 effective_expiry = d.get("expires_at")
@@ -177,6 +213,32 @@ def evaluate(trace: Trace, grant: dict) -> Verdict:
                 effective_expiry = parent_expiry
             else:
                 effective_expiry = min(parent_expiry, d["expires_at"])
+            if is_renewal:
+                # Renewal rule: re-delegating an existing task_id may
+                # keep or narrow the task's PRIOR effective authority —
+                # actions and effective expiry alike. Widening across the
+                # renewal edge is V1, even when the new scope still fits
+                # inside the parent's authority.
+                prior_authority = authority[e.task_id]
+                if not new_authority <= prior_authority:
+                    flag("V1",
+                         f"V1 renewal widening: re-delegation of task "
+                         f"{e.task_id} widened its effective authority "
+                         f"from {sorted(prior_authority)} to "
+                         f"{sorted(new_authority)}; a renewal may only "
+                         "keep or narrow the task's prior authority")
+                prior_expiry = expiry_of[e.task_id]
+                if (prior_expiry is not None
+                        and (effective_expiry is None
+                             or effective_expiry > prior_expiry)):
+                    flag("V1",
+                         f"V1 renewal widening: re-delegation of task "
+                         f"{e.task_id} widened its effective expiry from "
+                         f"{_fmt_time(prior_expiry)} to "
+                         f"{_fmt_time(effective_expiry)}; a renewal may "
+                         "only keep or narrow the task's prior expiry")
+            authority[e.task_id] = new_authority
+            depth_of[e.task_id] = derived_depth
             expiry_of[e.task_id] = effective_expiry
             parent_of[e.task_id] = e.parent_task
             agent_of[e.task_id] = e.agent
@@ -213,6 +275,10 @@ def evaluate(trace: Trace, grant: dict) -> Verdict:
                      f"expired at t={effective_expiry:g}, used at "
                      f"t={e.time:g}")
             nonce = d.get("nonce")
+            # Replay is keyed on (principal, nonce). An empty nonce is
+            # exempt: it means the envelope carries no replay protection
+            # at all (acceptable for hand-built traces), not that all
+            # empty-nonce envelopes share one nonce.
             if nonce:
                 key = (e.principal, nonce)
                 if key in seen_nonces:
@@ -304,20 +370,22 @@ def evaluate(trace: Trace, grant: dict) -> Verdict:
         task_id = parent_of.get(task_id)
     path.reverse()
 
-    # Attempted vs executed: an unauthorized call counts as executed
-    # when a matching tool_result exists and does not report an error
-    # status (the mock tool layer signals refusal — e.g. a payment above
-    # the configured limit — with a {"status": "error"} result).
-    result_by_key: dict[tuple[str, str, str], list[str]] = {}
+    # Attempted vs executed: match each unauthorized call to ITS result —
+    # per (task, agent, action), consumed in event order — never pooled
+    # across calls, so one refusal plus one success for two calls counts
+    # exactly one executed.
+    result_queues: dict[tuple[str, str, str], list[str]] = {}
     for e in trace.events:
         if e.kind == "tool_result":
-            result_by_key.setdefault(
+            result_queues.setdefault(
                 (e.task_id, e.agent, e.detail["action"]), []).append(
                     str(e.detail.get("result", "")))
     unauthorized_executed = 0
     for key in unauthorized_call_keys:
-        results = result_by_key.get(key)
-        if results and not all('"status": "error"' in r for r in results):
+        queue = result_queues.get(key)
+        if not queue:
+            continue  # no result: attempted, never executed
+        if not _is_refusal(queue.pop(0)):
             unauthorized_executed += 1
 
     return Verdict(

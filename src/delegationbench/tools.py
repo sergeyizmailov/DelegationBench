@@ -17,7 +17,12 @@ editing the package.
 ``payment.execute`` consults the config store's ``payment_limit``: an
 execute above the limit fails with an error result and the payment is
 NOT recorded as executed. This makes sibling state contamination (one
-agent raising the limit so another can pay) technically real.
+agent raising the limit so another can pay) technically real. A
+``payment_limit`` rewritten mid-run to a non-integer fails executes the
+same graceful way (error result, no payment recorded) instead of
+crashing the run. Non-positive amounts (``<= 0``) are refused with an
+error result on both prepare and execute — a negative payment is
+nonsense for the mock.
 
 ``outcome_state()`` exposes the final tool/store state as a small set of
 generic counters (per store, plus ``config_unchanged``) so a scenario's
@@ -144,8 +149,7 @@ class Tools:
         return self.emails[email_id]
 
     def _email_draft(self, args: dict) -> str:
-        self._email_counter += 1
-        email_id = f"draft-{self._email_counter}"
+        email_id = self._fresh_email_id("draft")
         self.emails[email_id] = (
             f"To: {args.get('to', '')}\nSubject: {args.get('subject', '')}"
             f"\n\n{args.get('body', '')}")
@@ -153,13 +157,21 @@ class Tools:
         return f"drafted email {email_id}"
 
     def _email_send(self, args: dict) -> str:
-        self._email_counter += 1
-        email_id = f"sent-{self._email_counter}"
+        email_id = self._fresh_email_id("sent")
         self.emails[email_id] = (
             f"To: {args.get('to', '')}\nSubject: {args.get('subject', '')}"
             f"\n\n{args.get('body', '')}")
         self._counts["emails_sent"] += 1
         return f"sent email {email_id}"
+
+    def _fresh_email_id(self, prefix: str) -> str:
+        """Next generated email id. Skips ids already present in the
+        store, so scenario-seeded ids (e.g. a seeded ``draft-1``) are
+        never overwritten by a generated one."""
+        self._email_counter += 1
+        while f"{prefix}-{self._email_counter}" in self.emails:
+            self._email_counter += 1
+        return f"{prefix}-{self._email_counter}"
 
     def _config_read(self, args: dict) -> str:
         key = str(args.get("key", ""))
@@ -191,24 +203,50 @@ class Tools:
         self.payments.append(record)
         return json.dumps(record, sort_keys=True)
 
-    def _payment_prepare(self, args: dict) -> str:
-        return self._payment(args, "prepared")
+    def _payment_error(self, args: dict, message: str) -> str:
+        """Refusal result: the payment is NOT recorded (same shape as the
+        over-limit path)."""
+        return json.dumps(
+            {"status": "error", "error": message,
+             "payee": str(args.get("payee", "")),
+             "amount": str(args.get("amount", ""))},
+            sort_keys=True)
 
-    def _payment_execute(self, args: dict) -> str:
-        limit = self._payment_limit()
+    @staticmethod
+    def _parse_amount(args: dict) -> int:
         try:
-            amount = int(str(args.get("amount", "")))
+            return int(str(args.get("amount", "")))
         except ValueError:
             raise ToolError(
                 f"payment amount must be an integer, "
                 f"got {args.get('amount')!r}") from None
+
+    def _payment_prepare(self, args: dict) -> str:
+        try:
+            amount = self._parse_amount(args)
+        except ToolError:
+            amount = None   # prepare historically accepted any string
+        if amount is not None and amount <= 0:
+            return self._payment_error(
+                args, f"amount must be positive, got {amount}")
+        return self._payment(args, "prepared")
+
+    def _payment_execute(self, args: dict) -> str:
+        try:
+            limit = self._payment_limit()
+        except UnknownResourceError:
+            raise   # missing key: a broken mock config, not a refusal
+        except ToolError as e:
+            # e.g. payment_limit rewritten mid-run to a non-integer via
+            # admin.config.update: refuse gracefully, like the
+            # over-limit path, instead of crashing the run.
+            return self._payment_error(args, str(e))
+        amount = self._parse_amount(args)
+        if amount <= 0:
+            return self._payment_error(
+                args, f"amount must be positive, got {amount}")
         if amount > limit:
             # Refused: the payment is NOT recorded as executed.
-            return json.dumps(
-                {"status": "error",
-                 "error": f"amount {amount} exceeds "
-                          f"payment_limit {limit}",
-                 "payee": str(args.get("payee", "")),
-                 "amount": str(args.get("amount", ""))},
-                sort_keys=True)
+            return self._payment_error(
+                args, f"amount {amount} exceeds payment_limit {limit}")
         return self._payment(args, "executed")
