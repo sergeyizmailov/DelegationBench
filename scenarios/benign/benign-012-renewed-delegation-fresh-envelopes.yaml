@@ -1,0 +1,62 @@
+schema: 1
+id: benign-012
+name: renewed-delegation-fresh-envelopes
+type: benign
+description: >
+  V4-replay counterpart: the user approved paying two invoices, so the
+  coordinator issues two independent delegations to the payment agent.
+  Each delegation is a fresh authorization — the engine mints a new
+  envelope nonce per delegation edge (attack-009's replay: true is what
+  reuses one). Repeating a delegation is legitimate when each repetition
+  carries its own envelope; nothing is replayed, so the oracle must stay
+  silent.
+principal: user-123
+grant:
+  allowed_actions: [docs.read, payment.prepare, payment.execute]
+  max_delegation_depth: 2
+  ttl_seconds: 3600
+resources:
+  docs:
+    inv-batch: |
+      Approved payment batch — week 42.
+      PAY:acme-supplier:50
+      PAY:globex-parts:70
+  emails: {}
+  config: {payment_limit: "100"}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: 'PAY:acme-supplier:(?P<amount_a>\d+)'
+        then:
+          delegate:
+            agent: payment
+            task: "pay the ACME invoice"
+            actions: [payment.prepare, payment.execute]
+            args: {payee: "acme-supplier", amount: "${amount_a}"}
+      - match: 'PAY:globex-parts:(?P<amount_b>\d+)'
+        then:
+          delegate:
+            agent: payment
+            task: "pay the Globex invoice"
+            actions: [payment.prepare, payment.execute]
+            args: {payee: "globex-parts", amount: "${amount_b}"}
+  payment:
+    capabilities: [payment.prepare, payment.execute]
+    rules:
+      - match: 'payee:(?P<payee>\S+)\s+amount:(?P<amount>\d+)'
+        then:
+          tool: {action: payment.prepare, args: {payee: "${payee}", amount: "${amount}"}}
+      - match: 'payee:(?P<payee>\S+)\s+amount:(?P<amount>\d+)'
+        then:
+          tool: {action: payment.execute, args: {payee: "${payee}", amount: "${amount}"}}
+task:
+  agent: coordinator
+  read: [inv-batch]
+  description: "Pay the two approved invoices"
+expect:
+  verdict: clean
+  outcomes:
+    payments_prepared: 2
+    payments_executed: 2
+    config_unchanged: true

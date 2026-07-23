@@ -54,9 +54,11 @@ configured callbacks when invoking its modules::
 Known ROMA trace gaps (from the audit, docs/research/roma-integration.md)
 -------------------------------------------------------------------------
 - ROMA's own ``ToolInvocationEvent`` records carry **no task_id**; this
-  adapter correlates tool calls to tasks via a callback-maintained module
-  stack. Calls outside any module context fall back to the
-  ``"uncorrelated"`` sentinel and are judged as V5 origin loss.
+  adapter correlates tool calls to tasks via a context-keyed module
+  stack (one stack per ``asyncio`` execution context, so interleaved
+  sibling tasks attribute to their own module invocation). Calls with no
+  module context visible fall back to the ``"uncorrelated"`` sentinel
+  and are judged as V5 origin loss.
 - Module-level execution events (``subtask_created``, ``plan_complete``,
   ``execute_complete``, ``task_transition``) are defined in ROMA's enum
   but **never emitted**; delegation edges are recovered from the side
@@ -70,6 +72,7 @@ Known ROMA trace gaps (from the audit, docs/research/roma-integration.md)
 
 from __future__ import annotations
 
+import contextvars
 from typing import TYPE_CHECKING, Any
 
 from ..oracle import Verdict, evaluate
@@ -104,6 +107,24 @@ def _depths(events: list[AdapterEvent]) -> dict[str, int]:
     return depths
 
 
+def _order_events(events: list[AdapterEvent]) -> list[AdapterEvent]:
+    """Normalize capture order into trace order.
+
+    Post-hoc capture (the ROMA example registers the task DAG *after*
+    execution) interleaves tool events with the delegation events that
+    authorize them, so a tool call can precede its task's delegation and
+    be judged V5 despite being authorized. Reorder so that every task's
+    delegation event precedes any of its tool events and delegations are
+    topological (parents before children, by resolved depth; stable for
+    equal depths). Non-delegation events keep their relative order.
+    """
+    depths = _depths(events)
+    delegations = sorted((e for e in events if e.kind == "delegation"),
+                         key=lambda e: depths[e.task_id])
+    others = [e for e in events if e.kind != "delegation"]
+    return delegations + others
+
+
 def build_trace(events: list[AdapterEvent], grant: dict) -> Trace:
     """Convert captured adapter events into a DelegationBench Trace.
 
@@ -113,6 +134,11 @@ def build_trace(events: list[AdapterEvent], grant: dict) -> Trace:
     grant anyway). Otherwise a synthetic root is emitted with
     ``grant.get("task_id", "root")``, agent ``grant.get("agent", "root")``
     and scope = ``grant["allowed_actions"]``.
+
+    Event order is normalized before conversion (see :func:`_order_events`):
+    delegation events come first, parents before children, so tool calls
+    captured before their task's delegation registration are still judged
+    against that delegation instead of reading as V5 origin loss.
     """
     trace = Trace()
     has_root = any(e.kind == "delegation" and e.parent_task is None
@@ -125,7 +151,7 @@ def build_trace(events: list[AdapterEvent], grant: dict) -> Trace:
                          expires_at=None, source="user",
                          task=grant.get("task", ""))
     depths = _depths(events)
-    for e in events:
+    for e in _order_events(events):
         if e.time is not None:
             trace.clock.now = e.time
         if e.kind == "delegation":
@@ -161,15 +187,29 @@ class ROMATraceCallback:
     inheritance, use :func:`dspy_callback_class` instead.
 
     Correlation strategy: ROMA tool records carry no task_id, so this
-    callback keeps a stack of active module contexts. ``on_module_start``
-    inspects the module inputs for a task object (anything with a string
+    callback keeps a stack of active module contexts per *execution
+    context* (``contextvars.ContextVar``). ``on_module_start`` inspects
+    the module inputs for a task object (anything with a string
     ``task_id`` attribute, or a ``task_id`` key — ROMA executors receive
-    the ``TaskNode``), pushes it, and ``on_module_end`` pops it. Tool
-    calls are attributed to the innermost active task; with no active
-    context they are recorded under ``"uncorrelated"`` (the oracle judges
-    these as V5 origin loss). Parallel sibling tasks interleave module
-    calls, so correlation is keyed strictly on task_id from the inputs,
-    never on call order.
+    the ``TaskNode``), pushes it keyed by the module's ``call_id``, and
+    ``on_module_end`` pops that same ``call_id``'s frame. Tool calls are
+    attributed to the innermost active task *of their own context*.
+
+    Because ROMA runs sibling subtasks via ``asyncio.gather``, each
+    sibling coroutine inherits its own copy of the context: a module
+    start in sibling B never clobbers sibling A's stack, so interleaved
+    siblings (start A, start B, tool from A) attribute correctly. A
+    single global stack would misattribute that tool call to B — wrong
+    attribution is worse than none, so a tool call whose context has no
+    active module frame is recorded under ``"uncorrelated"`` (the oracle
+    judges these as V5 origin loss) rather than guessed.
+
+    Limits: correlation is only as good as the context boundary. True
+    interleaving *within one* context (e.g. threads sharing a context,
+    or a framework that drives siblings sequentially in one coroutine
+    without call_id-discernible nesting) is indistinguishable from
+    nesting and falls back to stack-top attribution; DSPy's callback API
+    passes no parent run identifier that would let the adapter do better.
     """
 
     def __init__(self) -> None:
@@ -178,7 +218,12 @@ class ROMATraceCallback:
         # propagate metadata to subtasks, so the harness populates this as
         # tasks are created.
         self.authority: dict[str, dict[str, Any]] = {}
-        self._module_stack: list[str] = []        # active task ids
+        # Active task ids of the current execution context (innermost
+        # last). Stored as an immutable tuple so every push/pop sets a
+        # fresh value — required for per-coroutine isolation.
+        self._task_stack: contextvars.ContextVar[tuple[str, ...]] = (
+            contextvars.ContextVar("delegationbench_roma_task_stack",
+                                   default=()))
         self._module_calls: dict[Any, str] = {}   # call_id -> task_id
         self._pending_tools: dict[Any, AdapterEvent] = {}
 
@@ -223,21 +268,28 @@ class ROMATraceCallback:
         task_id = self._task_id_from_inputs(inputs)
         if task_id is not None:
             self._module_calls[call_id] = task_id
-            self._module_stack.append(task_id)
+            self._task_stack.set(self._task_stack.get() + (task_id,))
 
     def on_module_end(self, call_id, outputs=None, exception=None) -> None:
         task_id = self._module_calls.pop(call_id, None)
-        if task_id is not None and task_id in self._module_stack:
-            # Pop the innermost matching frame; nested calls with the same
-            # task keep the outer frames intact.
-            idx = len(self._module_stack) - 1 - self._module_stack[::-1].index(task_id)
-            del self._module_stack[idx]
+        if task_id is not None:
+            stack = self._task_stack.get()
+            if task_id in stack:
+                # Pop the innermost matching frame; nested calls with the
+                # same task keep the outer frames intact.
+                idx = len(stack) - 1 - stack[::-1].index(task_id)
+                self._task_stack.set(stack[:idx] + stack[idx + 1:])
 
     def on_tool_start(self, call_id, instance, inputs) -> None:
         name = (getattr(instance, "__name__", None)
                 or getattr(instance, "name", None)
                 or type(instance).__name__)
-        task_id = self._module_stack[-1] if self._module_stack else UNCORRELATED
+        stack = self._task_stack.get()
+        # Attribute to this context's innermost module invocation. With
+        # no frame visible in THIS context the call is genuinely
+        # unattributable: record "uncorrelated" (V5-detectable) instead
+        # of guessing a task from another context.
+        task_id = stack[-1] if stack else UNCORRELATED
         meta = self.authority.get(task_id, {})
         event = AdapterEvent(
             "tool_call", task_id,

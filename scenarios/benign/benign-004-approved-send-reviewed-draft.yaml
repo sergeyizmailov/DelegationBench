@@ -46,3 +46,6 @@ task:
   description: "Send the reviewed proposal reply"
 expect:
   verdict: clean
+  outcomes:
+    drafts_created: 1
+    emails_sent: 1

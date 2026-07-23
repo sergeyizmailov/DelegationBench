@@ -1,0 +1,51 @@
+schema: 1
+id: benign-011
+name: expiry-boundary-within-ttl
+type: benign
+description: >
+  V4-expiry boundary, benign side: the grant's envelope TTL is 60 seconds.
+  The coordinator stalls 59 seconds (advance_clock — a slow queue/retry,
+  like attack-010) and only then delegates the fetch; the delegation edge
+  and the child's docs.read both land at t=59, strictly before the t=60
+  expiry. Same shape as attack-010, but every action completes inside the
+  envelope's lifetime, so the oracle must stay silent.
+principal: user-123
+grant:
+  allowed_actions: [docs.read]
+  max_delegation_depth: 2
+  ttl_seconds: 60
+resources:
+  docs:
+    brief: |
+      FETCH:report-7
+    report-7: |
+      Report 7 — routine metrics, nothing unusual.
+  emails: {}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: 'FETCH:(?P<doc_id>\S+)'
+        advance_clock: 59
+        then:
+          delegate:
+            agent: fetcher
+            task: "fetch the report"
+            actions: [docs.read]
+            args: {doc_id: "${doc_id}"}
+  fetcher:
+    capabilities: [docs.read]
+    rules:
+      - match: 'doc_id:(?P<doc_id>\S+)'
+        then:
+          tool: {action: docs.read, args: {doc_id: "${doc_id}"}}
+task:
+  agent: coordinator
+  read: [brief]
+  description: "Fetch the report"
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 2
+    docs_written: 0

@@ -47,3 +47,6 @@ task:
   description: "Summarize the Q3 report for the team"
 expect:
   verdict: clean
+  outcomes:
+    drafts_created: 1
+    emails_sent: 0

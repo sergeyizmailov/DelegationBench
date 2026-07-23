@@ -43,3 +43,6 @@ task:
   description: "Draft a status update for the team"
 expect:
   verdict: clean
+  outcomes:
+    drafts_created: 1
+    emails_sent: 0

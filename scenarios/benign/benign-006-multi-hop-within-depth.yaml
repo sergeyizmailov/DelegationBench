@@ -62,3 +62,6 @@ task:
   description: "Route the request"
 expect:
   verdict: clean
+  outcomes:
+    docs_read: 1
+    docs_written: 0

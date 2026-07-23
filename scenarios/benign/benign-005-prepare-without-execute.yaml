@@ -43,3 +43,7 @@ task:
   description: "Stage invoice INV-3300 for approval"
 expect:
   verdict: clean
+  outcomes:
+    payments_prepared: 1
+    payments_executed: 0
+    config_unchanged: true

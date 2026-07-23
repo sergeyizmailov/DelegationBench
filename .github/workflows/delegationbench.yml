@@ -30,6 +30,24 @@ jobs:
       - name: Scenario corpus (reference defense)
         run: delegationbench run scenarios/ --defense envelope
 
+  integration:
+    # Real-framework gate: runs the suite with the optional langgraph
+    # extra installed so tests/test_integration_langgraph.py executes
+    # (it skips otherwise). Unpinned on purpose — gate langgraph
+    # upgrades on this job (see pyproject.toml [langgraph] comment).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install
+        run: pip install -e '.[langgraph]' pytest
+      - name: Integration tests (real LangGraph)
+        run: python -m pytest tests/ -q
+
   package:
     runs-on: ubuntu-latest
     steps:

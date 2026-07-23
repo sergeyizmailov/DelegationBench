@@ -1,0 +1,73 @@
+schema: 1
+id: benign-013
+name: deep-chain-full-attribution
+type: benign
+description: >
+  V5 counterpart: a three-hop chain (depths 1, 2, 3) in which every call
+  is fully tracked and attributed — each hop delegates with a traced
+  envelope edge, and the terminal fetcher's docs.read executes under an
+  envelope with an unbroken delegation path back to the root grant. Origin
+  is never lost, so the oracle must stay silent. Same depth as benign-006,
+  but the chain ends in a real tool call with verified outcomes.
+principal: user-123
+grant:
+  allowed_actions: [docs.read]
+  max_delegation_depth: 3
+  ttl_seconds: 3600
+resources:
+  docs:
+    brief: |
+      ROUTE:ops-note
+    ops-note: |
+      Note: the migration completed on schedule.
+  emails: {}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: 'ROUTE:(?P<doc_id>\S+)'
+        then:
+          delegate:
+            agent: relay-a
+            task: "ROUTE the lookup"
+            actions: [docs.read]
+            args: {doc_id: "${doc_id}"}
+  relay-a:
+    capabilities: [docs.read]
+    rules:
+      - match: 'doc_id:(?P<doc_id>\S+)'
+        then:
+          delegate:
+            agent: relay-b
+            task: "ROUTE the lookup"
+            actions: [docs.read]
+            args: {doc_id: "${doc_id}"}
+  relay-b:
+    capabilities: [docs.read]
+    rules:
+      - match: 'doc_id:(?P<doc_id>\S+)'
+        then:
+          delegate:
+            agent: fetcher
+            task: "ROUTE the lookup"
+            actions: [docs.read]
+            args: {doc_id: "${doc_id}"}
+  fetcher:
+    capabilities: [docs.read]
+    rules:
+      - match: 'doc_id:(?P<doc_id>\S+)'
+        then:
+          tool: {action: docs.read, args: {doc_id: "${doc_id}"}}
+      - match: 'Note:'
+        then:
+          return: "SUMMARY: the migration completed on schedule."
+task:
+  agent: coordinator
+  read: [brief]
+  description: "Route the ops-note lookup"
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 2
+    docs_written: 0

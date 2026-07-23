@@ -14,7 +14,9 @@ Every event is a dict with a ``type`` key. ``run_id`` /
 ``parent_run_id`` form the run tree from which the delegation tree is
 rebuilt: the nearest ancestor *agent* run of a tool run is the agent
 that invoked it, and a delegation edge binds the first descendant agent
-run of the destination agent.
+run of the destination agent — or, for same-graph handoffs
+(``Command(goto=...)`` where the destination node run is a sibling of
+the handoff tool run), the next unbound agent run of that agent.
 
 ``agent_start``
     ``run_id``, ``parent_run_id`` (None for the root run), ``agent``
@@ -149,11 +151,17 @@ def build_trace(events: Iterable[NeutralEvent], grant: dict) -> Trace:
         None,
     )
 
-    # Bind each delegation (handoff tool run) to the first descendant
-    # agent run of the destination agent, in event order.
+    # Bind each delegation (handoff tool run) to an agent run of the
+    # destination agent. Two real framework shapes exist:
+    # 1. Subgraph handoffs (Command.PARENT, subagents-as-tools): the
+    #    destination agent run nests *under* the handoff tool run.
+    # 2. Same-graph handoffs (a tool returning Command(goto="node")):
+    #    the destination node run is a *sibling* of the tool run in the
+    #    run tree; bind the next unbound agent_start of the destination
+    #    agent in event order instead.
     bound_child: dict[str, str] = {}   # handoff tool run_id -> child agent run_id
     used_runs: set[str] = set()
-    for ev in events:
+    for idx, ev in enumerate(events):
         if ev.get("type") != "delegation":
             continue
         tool_run = ev.get("run_id")
@@ -175,6 +183,15 @@ def build_trace(events: Iterable[NeutralEvent], grant: dict) -> Trace:
                 cur = parent_of_run.get(cur)
             if tool_run in bound_child:
                 break
+        if tool_run not in bound_child:
+            for cand in events[idx + 1:]:
+                rid = cand.get("run_id")
+                if (cand.get("type") == "agent_start" and rid is not None
+                        and rid not in used_runs and rid != root_run
+                        and agent_of_run.get(rid) == dest):
+                    bound_child[tool_run] = rid
+                    used_runs.add(rid)
+                    break
 
     grant_actions = sorted(grant["allowed_actions"])
     task_of_run: dict[str, str] = {}
@@ -201,6 +218,18 @@ def build_trace(events: Iterable[NeutralEvent], grant: dict) -> Trace:
                 scope_of_task[rid] = grant_actions
                 depth_of_task[rid] = 0
                 expires_of_task[rid] = grant.get("expires_at")
+            elif rid not in task_of_run:
+                # Nested agent run not bound to a delegation: real graphs
+                # wrap each agent in several chain runs (the node run and
+                # the subgraph's inner graph run both carry the same
+                # langgraph_node). Alias such runs to the nearest
+                # enclosing agent run's task so their tool calls are not
+                # orphaned. Runs bound to a delegation keep their own
+                # task (they were registered when the delegation event
+                # was processed, before this agent_start).
+                ancestor = nearest_agent_run(parent_of_run.get(rid))
+                if ancestor is not None and ancestor in task_of_run:
+                    task_of_run[rid] = task_of_run[ancestor]
         elif etype == "delegation":
             parent_run = nearest_agent_run(ev.get("parent_run_id"))
             parent_task = (task_of_run.get(parent_run) if parent_run

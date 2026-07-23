@@ -17,7 +17,7 @@ from .clock import VirtualClock
 from .envelope import Envelope
 from .scenario import Scenario
 from .tools import Tools
-from .trace import Trace
+from .trace import BlockedError, Trace
 
 
 class Defense(Protocol):
@@ -96,12 +96,27 @@ def run_scenario(scn: Scenario, defense: Defense | None = None,
     trace.delegation(None, root_env.task_id, root_agent.name,
                      sorted(root_env.allowed_actions), depth=0,
                      nonce=root_env.nonce, expires_at=root_env.expires_at,
-                     source="user", task=scn.task.description, args={})
+                     source="user", principal=root_env.principal,
+                     task=scn.task.description, args={})
 
     # Root agent reads the task's resources first; the concatenated
-    # content (provenance: document) is what its rules scan.
+    # content (provenance: document) is what its rules scan. These reads
+    # go through the same defense hook as every other tool call: the
+    # principal -> root boundary establishes the grant, it does not
+    # exempt the root agent from it.
     parts = []
     for doc_id in scn.task.read:
+        if defense is not None:
+            try:
+                defense.before_tool_call(root_agent, root_env, "docs.read",
+                                         {"doc_id": doc_id}, "user")
+            except BlockedError as e:
+                trace.blocked(root_env.task_id, root_agent.name,
+                              phase="tool_call", reason=str(e),
+                              source="user", action="docs.read",
+                              args={"doc_id": doc_id},
+                              principal=root_env.principal)
+                continue
         parts.append(tools.call(root_agent, root_env, "docs.read",
                                 {"doc_id": doc_id}, "user"))
     if parts:

@@ -46,3 +46,7 @@ task:
   description: "Research and pay the approved invoice"
 expect:
   verdict: clean
+  outcomes:
+    payments_prepared: 1
+    payments_executed: 1
+    config_unchanged: true

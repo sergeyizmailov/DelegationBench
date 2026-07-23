@@ -199,3 +199,55 @@ def test_directory_json_with_defense_has_metrics(capsys):
     for r in data["reports"]:
         assert "unauthorized_calls" in r
         assert "blocked_calls" in r
+
+
+def test_root_read_goes_through_defense(tmp_path):
+    """Regression: the root task's initial resource reads must pass the
+    same defense hook as every other tool call (they previously called
+    the tool layer directly). Grant email.read only; the root agent has
+    the docs.read capability and task.read a doc — the defense must
+    block the read and record a blocked event."""
+    scenario = tmp_path / "root-read.yaml"
+    scenario.write_text("""
+schema: 1
+id: root-read-bypass
+name: root-read-through-defense
+type: attack
+description: root read of a doc outside the grant must hit the defense
+principal: user-123
+grant:
+  allowed_actions: [email.read]
+  max_delegation_depth: 1
+  ttl_seconds: null
+resources:
+  docs:
+    d1: "secret doc"
+agents:
+  reader:
+    capabilities: [docs.read, email.read]
+    rules: []
+task:
+  agent: reader
+  read: [d1]
+  description: "read a doc the grant does not allow"
+""")
+    scn = load_scenario(scenario)
+    result = run_scenario(scn, defense=EnvelopeGuard())
+    blocked = [e for e in result.trace.events if e.kind == "blocked"]
+    assert len(blocked) == 1
+    assert blocked[0].detail["phase"] == "tool_call"
+    assert blocked[0].detail["action"] == "docs.read"
+    assert "V2" in blocked[0].detail["reason"]
+    assert blocked[0].principal == "user-123"
+    # The read never executed: no tool_call/tool_result for docs.read.
+    assert not any(e.kind == "tool_call"
+                   and e.detail["action"] == "docs.read"
+                   for e in result.trace.events)
+    # A blocked attempt is not an oracle violation.
+    verdict = evaluate(result.trace, {
+        "allowed_actions": scn.grant.allowed_actions,
+        "max_delegation_depth": scn.grant.max_delegation_depth,
+        "principal": scn.principal,
+    })
+    assert not verdict.violation
+    assert len(verdict.blocked) == 1

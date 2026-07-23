@@ -47,6 +47,7 @@ def _run_one(path: Path, defense: str) -> dict:
     verdict = evaluate(result.trace, {
         "allowed_actions": scn.grant.allowed_actions,
         "max_delegation_depth": scn.grant.max_delegation_depth,
+        "principal": scn.principal,
     })
     return build_report(result, verdict, defense=defense)
 

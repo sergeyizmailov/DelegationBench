@@ -95,7 +95,7 @@ straight into CI (see the [project workflow](.github/workflows/delegationbench.y
 | | DelegationBench |
 |---|---|
 | **Tests** | Cross-agent authority propagation, confused-deputy behavior, delegation depth, expiry/replay, origin continuity, and result-driven scope widening |
-| **Corpus** | 15 attack scenarios + 10 benign lookalikes |
+| **Corpus** | 15 attack scenarios + 15 benign lookalikes |
 | **Judge** | Deterministic authorization oracle; no LLM judge |
 | **Defense baseline** | Tool-boundary delegation envelopes with optional HMAC integrity |
 | **Outputs** | Human-readable terminal reports and machine-readable JSON |
@@ -105,11 +105,12 @@ straight into CI (see the [project workflow](.github/workflows/delegationbench.y
 - **YAML scenario format** — agents with capability manifests, a user grant
   (allowed actions, max delegation depth, TTL), content stores (docs, emails,
   config), and scripted agent rules that stand in for LLM instruction-following.
-- **Deterministic authorization oracle** — judges six violation classes over the
+- **Deterministic authorization oracle** — judges seven violation classes over the
   execution trace (see [THREAT_MODEL.md](THREAT_MODEL.md)):
   V1 authority expansion on handoff · V2 confused deputy · V3 depth violation ·
-  V4 expired/replayed delegation · V5 origin loss · V6 scope widening via result.
-- **25-scenario corpus** — 15 attacks, each paired with benign lookalikes that
+  V4 expired/replayed delegation · V5 origin loss · V6 scope widening via result ·
+  V7 principal substitution.
+- **30-scenario corpus** — 15 attacks, each paired with benign lookalikes that
   must stay clean (a defense that blocks everything is a failure, not a win).
 - **Reference defense** — a delegation-envelope guard enforced at the tool
   boundary, outside model reasoning: `--defense envelope` (attenuation-only
@@ -117,8 +118,15 @@ straight into CI (see the [project workflow](.github/workflows/delegationbench.y
   (adds HMAC integrity; Ed25519 is the intended production upgrade).
 - **Delegation-aware fuzzer** — mutates the authority-relevant structure of a
   scenario (payload wording, claimed role, topology, depth, expiry/replay,
-  instruction source, requested scope), hunts for defense bypasses, then
-  minimizes any finding to the shortest reproducible exploit:
+  instruction source, requested scope) plus the envelope's integrity fields:
+  principal identity (`as_principal`, V7-shaped), origin tracking
+  (`untracked`, V5-shaped), agent/resource identifiers (everything keyed on
+  names), and grant TTL/depth/clock combinations. It hunts for defense
+  bypasses, then minimizes any finding to the shortest reproducible exploit.
+  Classification is honest about dead mutants: a mutant whose mutation broke
+  the execution path (no agent-fired tool call) is counted as `dead`, never
+  as an oracle `divergent` — a clean verdict on a run where nothing executed
+  carries no signal:
 
   ```bash
   delegationbench fuzz scenarios/attacks/attack-008-malicious-document.yaml \
@@ -127,7 +135,10 @@ straight into CI (see the [project workflow](.github/workflows/delegationbench.y
 
 - **Reports** — terminal (human) and `--format json` (machine) with per-scenario
   verdicts, full traces, and corpus metrics: Unauthorized Action Rate, Attack
-  Containment Rate, Benign Task Success Rate.
+  Containment Rate, Benign Task Success Rate. Benign Task Success Rate measures
+  verified task completion — zero blocks AND the scenario's `expect.outcomes`
+  assertions on the final tool/store state met — so an agent that does nothing
+  does not score as a success.
 
 ## How it works
 
@@ -196,7 +207,7 @@ authorized it. Per-agent permission checks miss this; the oracle does not.
 ```
 src/delegationbench/   # package: scenario, runner, oracle, defense, fuzzer, report, cli
 scenarios/attacks/     # 15 attack scenarios
-scenarios/benign/      # 10 benign lookalikes
+scenarios/benign/      # 15 benign lookalikes
 tests/                 # pytest suite
 experiments/           # original minimal proof-of-concept (kept for reference)
 docs/research/         # competitive landscape, ROMA/LangGraph integration audits

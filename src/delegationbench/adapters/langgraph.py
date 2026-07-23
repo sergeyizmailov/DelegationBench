@@ -115,6 +115,18 @@ class DelegationBenchCallback(_AsyncCallbackHandler):
         Tool-name prefixes that mark a delegation handoff. Default:
         ``("transfer_to_", "delegate_to_")``. The langgraph-supervisor
         ``__handoff_destination`` metadata key is always honored.
+    action_map:
+        Application-supplied mapping from framework tool names to
+        canonical grant actions, e.g. ``{"read_doc": "docs.read",
+        "execute_payment": "payment.execute"}``. Real framework tools are
+        named like Python functions while grants use canonical action
+        ids, so without this mapping the oracle judges every tool call
+        on its raw name (an authorized ``read_doc`` under a
+        ``docs.read`` grant reads as V2). Tool names not present in the
+        map pass through **unchanged** — that pass-through is deliberate:
+        the oracle then judges the raw name, which surfaces unmapped
+        tools as V2 instead of silently authorizing them. Handoff
+        (delegation) tool names are never mapped.
     """
 
     HANDOFF_PREFIXES = ("transfer_to_", "delegate_to_")
@@ -123,11 +135,13 @@ class DelegationBenchCallback(_AsyncCallbackHandler):
 
     def __init__(self, agents: Iterable[str] | None = None,
                  principal_keys: Iterable[str] | None = None,
-                 handoff_prefixes: Iterable[str] | None = None) -> None:
+                 handoff_prefixes: Iterable[str] | None = None,
+                 action_map: dict[str, str] | None = None) -> None:
         self.agents = set(agents) if agents is not None else None
         self.principal_keys = tuple(principal_keys or self.PRINCIPAL_KEYS)
         self.handoff_prefixes = tuple(handoff_prefixes
                                       or self.HANDOFF_PREFIXES)
+        self.action_map = dict(action_map or {})
         self.events: list[NeutralEvent] = []
         self._agent_of_run: dict[str, str] = {}
         self._parent_of_run: dict[str, str | None] = {}
@@ -203,10 +217,17 @@ class DelegationBenchCallback(_AsyncCallbackHandler):
         is_handoff = dest is not None or name.startswith(
             self.handoff_prefixes)
         rid = str(run_id)
-        parent = str(parent_run_id) if parent_run_id else None
         from_run = self._nearest_agent(parent_run_id)
         from_agent = (self._agent_of_run.get(from_run) if from_run
                       else None)
+        # Anchor the event to the nearest ancestor AGENT run rather than
+        # the raw parent run: in real graphs the raw parent is an
+        # infrastructure node run (ToolNode, "tools") that emits no
+        # event, so build_trace could not walk past it. The full raw
+        # tree is only needed internally; downstream consumers reason
+        # about agent runs.
+        parent = from_run or (str(parent_run_id) if parent_run_id
+                              else None)
         if is_handoff:
             if dest is None:
                 for prefix in self.handoff_prefixes:
@@ -220,10 +241,13 @@ class DelegationBenchCallback(_AsyncCallbackHandler):
                 "args": dict(inputs or {}), "ts": time.time(),
             })
         else:
+            # Map the framework tool name to the canonical grant action;
+            # unmapped names pass through unchanged (see class docstring).
+            action = self.action_map.get(name, name)
             self.events.append({
                 "type": "tool_call", "run_id": rid, "parent_run_id": parent,
                 "agent": from_agent or metadata.get("langgraph_node"),
-                "tool": name, "args": dict(inputs or {}),
+                "tool": action, "args": dict(inputs or {}),
                 "ts": time.time(),
             })
 

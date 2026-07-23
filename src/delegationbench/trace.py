@@ -8,6 +8,8 @@ Event kinds: ``delegation``, ``tool_call``, ``tool_result``, and
 - ``source``: provenance of the content that triggered the event
   (``user`` | ``document`` | ``tool_result`` | ``child_result``). The
   oracle uses this for V6 (scope widening via result).
+- ``principal``: the principal of the envelope that authorized the event.
+  The oracle compares it against the root grant's principal (V7).
 - envelope metadata (``depth``, ``nonce``, ``expires_at``) so the oracle
   can judge structural rules (V3, V4) without trusting the runner.
 """
@@ -46,6 +48,7 @@ class Event:
     task_id: str
     agent: str
     source: str = "user"
+    principal: str = ""
     detail: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -57,6 +60,7 @@ class Event:
             "task_id": self.task_id,
             "agent": self.agent,
             "source": self.source,
+            "principal": self.principal,
             **self.detail,
         }
 
@@ -78,32 +82,35 @@ class Trace:
     def delegation(self, parent_task: str | None, task_id: str, agent: str,
                    scope, *, depth: int, nonce: str,
                    expires_at: float | None, source: str = "user",
+                   principal: str = "",
                    task: str = "", args: dict | None = None) -> None:
         self._append(Event(
             "delegation", len(self.events), self.clock.now, parent_task,
-            task_id, agent, source,
+            task_id, agent, source, principal,
             {"scope": sorted(scope), "depth": depth, "nonce": nonce,
              "expires_at": expires_at, "task": task, "args": args or {}}))
 
     def tool_call(self, task_id: str, agent: str, action: str, args: dict,
                   *, source: str = "user", nonce: str = "",
-                  expires_at: float | None = None) -> None:
+                  expires_at: float | None = None,
+                  principal: str = "") -> None:
         self._append(Event(
             "tool_call", len(self.events), self.clock.now, None, task_id,
-            agent, source,
+            agent, source, principal,
             {"action": action, "args": dict(args), "nonce": nonce,
              "expires_at": expires_at}))
 
     def tool_result(self, task_id: str, agent: str, action: str,
-                    result: str, *, source: str = "user") -> None:
+                    result: str, *, source: str = "user",
+                    principal: str = "") -> None:
         self._append(Event(
             "tool_result", len(self.events), self.clock.now, None, task_id,
-            agent, source, {"action": action, "result": result}))
+            agent, source, principal, {"action": action, "result": result}))
 
     def blocked(self, task_id: str, agent: str, *, phase: str, reason: str,
                 source: str = "user", parent_task: str | None = None,
                 action: str | None = None, args: dict | None = None,
-                scope=None, task: str = "") -> None:
+                scope=None, task: str = "", principal: str = "") -> None:
         """Record a defense rejection: the action did not execute."""
         detail: dict = {"phase": phase, "reason": reason}
         if action is not None:
@@ -114,7 +121,8 @@ class Trace:
         if task:
             detail["task"] = task
         self._append(Event("blocked", len(self.events), self.clock.now,
-                           parent_task, task_id, agent, source, detail))
+                           parent_task, task_id, agent, source, principal,
+                           detail))
 
     def to_dict(self) -> dict:
         return {"events": [e.to_dict() for e in self.events]}

@@ -263,3 +263,77 @@ def test_dangling_tool_run_without_result_is_tolerated():
     verdict = run_oracle(trace, GRANT)
     assert not verdict.violation
     assert [e.kind for e in trace.events] == ["delegation", "tool_call"]
+
+
+# -- action_map: real framework tool names -> canonical grant actions -------
+
+REAL_NAME_EVENTS = {
+    # The review's PoC shape: real framework tools are named like Python
+    # functions (read_doc, execute_payment) while the grant uses canonical
+    # actions (docs.read, payment.execute).
+    "read": ({"name": "read_doc"}, {"doc_id": "inv-2041"}),
+    "pay": ({"name": "execute_payment"},
+            {"payee": "acme-supplier", "amount": "950"}),
+}
+
+ACTION_MAP = {"read_doc": "docs.read",
+              "execute_payment": "payment.execute",
+              "prepare_payment": "payment.prepare"}
+
+
+def real_name_flow(handler, tool_key):
+    serialized, inputs = REAL_NAME_EVENTS[tool_key]
+
+    async def flow():
+        await handler.on_chain_start(
+            {}, {}, run_id="r-root", parent_run_id=None,
+            metadata={"langgraph_node": "reader", "principal": "user-123"})
+        await handler.on_tool_start(
+            serialized, "x", run_id="t-1", parent_run_id="r-root",
+            metadata={"langgraph_node": "reader"}, inputs=inputs)
+        await handler.on_tool_end("ok", run_id="t-1")
+        await handler.on_chain_end({}, run_id="r-root")
+
+    return flow
+
+
+def test_action_map_authorizes_real_tool_names():
+    # With the mapping, an authorized read_doc under a docs.read grant is
+    # clean (this was misjudged as V2 before the mapping existed).
+    handler = make_handler(action_map=ACTION_MAP)
+    drive(real_name_flow(handler, "read"))
+    assert handler.events[1]["tool"] == "docs.read"
+    verdict = run_oracle(build_trace(handler.events, GRANT), GRANT)
+    assert not verdict.violation
+    assert verdict.kinds == []
+
+
+def test_action_map_flags_canonical_action_of_out_of_grant_tool():
+    handler = make_handler(action_map=ACTION_MAP)
+    drive(real_name_flow(handler, "pay"))
+    assert handler.events[1]["tool"] == "payment.execute"
+    verdict = run_oracle(build_trace(handler.events, GRANT), GRANT)
+    assert verdict.violation
+    assert "V2" in verdict.kinds
+    assert verdict.unauthorized_actions == ["payment.execute"]
+
+
+def test_unmapped_names_pass_through_unchanged_documented():
+    # Documented behavior: without a mapping the oracle judges the RAW
+    # framework tool name — an authorized read_doc reads as V2 on
+    # "read_doc". Unmapped names are never silently authorized.
+    handler = make_handler()
+    drive(real_name_flow(handler, "read"))
+    assert handler.events[1]["tool"] == "read_doc"
+    verdict = run_oracle(build_trace(handler.events, GRANT), GRANT)
+    assert verdict.violation
+    assert "V2" in verdict.kinds
+    assert verdict.unauthorized_actions == ["read_doc"]
+
+
+def test_action_map_does_not_rewrite_handoff_tool_names():
+    handler = make_handler(action_map={"transfer_to_payment": "docs.read"})
+    drive(attack_008_events(handler))
+    delegation = next(e for e in handler.events
+                      if e["type"] == "delegation")
+    assert delegation["tool"] == "transfer_to_payment"

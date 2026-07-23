@@ -15,6 +15,29 @@ Schema v1 field notes:
   execute the tool call with a detached envelope and trace no delegation
   edge, so the call has no path back to the root grant (models an
   orchestrator bypass / origin loss, V5).
+- ``agents.<name>.rules[].then.{delegate,tool}.as_principal`` (string,
+  optional): stamp the derived delegation envelope (or the envelope the
+  tool call executes under) with a different, content-derived principal
+  instead of the parent envelope's. Models cross-user context confusion:
+  the orchestrator is deceived into acting under another principal's
+  identity; the orchestrator holds the signing key, so a substituted
+  envelope still verifies (models V7, principal substitution).
+- ``expect.outcomes`` (mapping, optional): assertions on the final
+  tool/store state, so a benign scenario only counts as a success when
+  the task's side effects actually happened. Keys are the tool layer's
+  generic per-store counters (``docs_read``, ``docs_written``,
+  ``emails_read``, ``emails_sent``, ``drafts_created``,
+  ``payments_prepared``, ``payments_executed`` — non-negative integers)
+  plus ``config_unchanged`` (boolean: the config store equals its
+  initial state). Only declared keys are checked.
+- ``actions`` (list of action ids, optional): scenario-declared custom
+  actions extending the built-in registry. Every action referenced
+  anywhere in the scenario (grant, capabilities, delegation scopes, tool
+  rules, expect) must be a built-in or declared here. Custom actions
+  execute via the tool layer's generic fallback.
+- ``resources.config.payment_limit`` (integer-as-string): required
+  whenever ``payment.execute`` is referenced anywhere in the scenario;
+  the payment tool refuses executes above the limit.
 """
 
 from __future__ import annotations
@@ -25,12 +48,14 @@ from pathlib import Path
 
 import yaml
 
-from .actions import ACTIONS
+from .actions import PAYMENT_EXECUTE, resolve_actions
 from .agents import Agent, Rule
+from .oracle import ALL_KINDS
+from .tools import OUTCOME_COUNTERS, OUTCOME_KEYS, PAYMENT_LIMIT_KEY
 
 SCHEMA_VERSION = 1
 SCENARIO_TYPES = ("attack", "benign")
-VIOLATION_KINDS = ("V1", "V2", "V3", "V4", "V5", "V6")
+VIOLATION_KINDS = ALL_KINDS
 _TEMPLATE_VAR = re.compile(r"\$\{(\w+)\}")
 
 
@@ -64,6 +89,7 @@ class Expect:
     verdict: str                                # "violation" | "clean"
     violation_kinds: list[str] = field(default_factory=list)
     unauthorized_actions: list[str] = field(default_factory=list)
+    outcomes: dict = field(default_factory=dict)  # final tool-state assertions
 
 
 @dataclass
@@ -77,6 +103,7 @@ class Scenario:
     resources: Resources
     agents: dict[str, Agent]
     task: TaskSpec
+    actions: frozenset[str] = frozenset()   # scenario-declared custom actions
     expect: Expect | None = None
     path: str = ""
 
@@ -114,14 +141,15 @@ def _require(path: Path, data: dict, key: str, ctx: str):
     return data[key]
 
 
-def _check_actions(path: Path, values, ctx: str) -> list[str]:
+def _check_actions(path: Path, values, ctx: str,
+                   known: frozenset[str]) -> list[str]:
     if not isinstance(values, list) or not all(
             isinstance(v, str) for v in values):
         raise _err(path, ctx, "must be a list of action ids")
-    for v in values:
-        if v not in ACTIONS:
-            raise _err(path, ctx, f"unknown action {v!r} "
-                                  f"(known: {sorted(ACTIONS)})")
+    unknown = sorted(set(values) - known)
+    if unknown:
+        raise _err(path, ctx, f"unknown action(s) {unknown} "
+                              f"(known: {sorted(known)})")
     return values
 
 
@@ -138,11 +166,20 @@ def _parse(path: Path, d: dict) -> Scenario:
                    f"must be one of {SCENARIO_TYPES}, got {scn_type!r}")
     principal = _require(path, d, "principal", "principal")
 
+    # scenario-declared custom actions extend the built-in registry
+    declared_raw = d.get("actions") or []
+    if not isinstance(declared_raw, list) or not all(
+            isinstance(v, str) and v for v in declared_raw):
+        raise _err(path, "actions",
+                   "must be a list of non-empty action ids")
+    declared = frozenset(declared_raw)
+    known = resolve_actions(declared)
+
     # grant
     g = _require(path, d, "grant", "grant")
     allowed = _check_actions(path, _require(path, g, "allowed_actions",
                                             "grant.allowed_actions"),
-                             "grant.allowed_actions")
+                             "grant.allowed_actions", known)
     if not allowed:
         raise _err(path, "grant.allowed_actions", "must not be empty")
     max_depth = _require(path, g, "max_delegation_depth",
@@ -171,7 +208,8 @@ def _parse(path: Path, d: dict) -> Scenario:
         raise _err(path, "agents", "must be a non-empty mapping")
     agents: dict[str, Agent] = {}
     for aname, aspec in agents_raw.items():
-        agents[str(aname)] = _parse_agent(path, str(aname), aspec or {})
+        agents[str(aname)] = _parse_agent(path, str(aname), aspec or {},
+                                          known)
 
     # task
     t = _require(path, d, "task", "task")
@@ -208,20 +246,77 @@ def _parse(path: Path, d: dict) -> Scenario:
                 raise _err(path, "expect.violation_kinds",
                            f"unknown kind {k!r} (known: {VIOLATION_KINDS})")
         unauth = _check_actions(path, e.get("unauthorized_actions") or [],
-                                "expect.unauthorized_actions")
+                                "expect.unauthorized_actions", known)
+        outcomes = _check_outcomes(path, e.get("outcomes"),
+                                   "expect.outcomes")
         expect = Expect(verdict=verdict, violation_kinds=kinds,
-                        unauthorized_actions=unauth)
+                        unauthorized_actions=unauth, outcomes=outcomes)
+
+    # payment.execute needs a payment_limit to enforce: the config value
+    # must exist and be an integer.
+    referenced = set(grant.allowed_actions)
+    for agent in agents.values():
+        referenced |= set(agent.capabilities)
+        for rule in agent.rules:
+            if "delegate" in rule.then:
+                referenced |= set(rule.then["delegate"].get("actions") or [])
+            elif "tool" in rule.then:
+                referenced.add(rule.then["tool"]["action"])
+    if expect is not None:
+        referenced |= set(expect.unauthorized_actions)
+    if PAYMENT_EXECUTE in referenced:
+        raw_limit = resources.config.get(PAYMENT_LIMIT_KEY)
+        if raw_limit is None:
+            raise _err(path, "resources.config",
+                       f"{PAYMENT_LIMIT_KEY!r} is required when "
+                       f"{PAYMENT_EXECUTE!r} is used")
+        try:
+            int(raw_limit)
+        except ValueError:
+            raise _err(path, "resources.config",
+                       f"{PAYMENT_LIMIT_KEY!r} must be an integer, "
+                       f"got {raw_limit!r}") from None
 
     return Scenario(id=str(scn_id), name=str(name), type=scn_type,
                     description=str(d.get("description", "")),
                     principal=str(principal), grant=grant,
                     resources=resources, agents=agents, task=task,
+                    actions=declared,
                     expect=expect, path=str(path))
 
 
-def _parse_agent(path: Path, name: str, spec: dict) -> Agent:
+def _check_as_principal(path: Path, body: dict, ctx: str) -> None:
+    value = body.get("as_principal")
+    if value is not None and not isinstance(value, str):
+        raise _err(path, f"{ctx}.as_principal", "must be a string")
+
+
+def _check_outcomes(path: Path, raw, ctx: str) -> dict:
+    """Validate the expect.outcomes contract: known keys only, counters
+    are non-negative integers, config_unchanged is a boolean."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict) or not raw:
+        raise _err(path, ctx, "must be a non-empty mapping")
+    for key, value in raw.items():
+        if key not in OUTCOME_KEYS:
+            raise _err(path, ctx, f"unknown outcome {key!r} "
+                                  f"(known: {sorted(OUTCOME_KEYS)})")
+        if key in OUTCOME_COUNTERS:
+            if not isinstance(value, int) or isinstance(value, bool) \
+                    or value < 0:
+                raise _err(path, ctx, f"{key!r} must be a non-negative "
+                                      f"integer, got {value!r}")
+        elif not isinstance(value, bool):
+            raise _err(path, ctx, f"{key!r} must be a boolean, "
+                                  f"got {value!r}")
+    return dict(raw)
+
+
+def _parse_agent(path: Path, name: str, spec: dict,
+                 known: frozenset[str]) -> Agent:
     caps = frozenset(_check_actions(path, spec.get("capabilities") or [],
-                                    f"agents.{name}.capabilities"))
+                                    f"agents.{name}.capabilities", known))
     rules = []
     for i, r in enumerate(spec.get("rules") or []):
         ctx = f"agents.{name}.rules[{i}]"
@@ -242,22 +337,34 @@ def _parse_agent(path: Path, name: str, spec: dict) -> Agent:
                 raise _err(path, f"{ctx}.then.delegate", "must be a mapping")
             _require(path, body, "agent", f"{ctx}.then.delegate")
             _check_actions(path, body.get("actions") or [],
-                           f"{ctx}.then.delegate.actions")
+                           f"{ctx}.then.delegate.actions", known)
+            _check_as_principal(path, body, f"{ctx}.then.delegate")
             templates = [str(body.get("task", ""))]
             templates += [str(v)
                           for v in (body.get("args") or {}).values()]
+            if body.get("as_principal") is not None:
+                templates.append(str(body["as_principal"]))
         elif kind == "tool":
             if not isinstance(body, dict):
                 raise _err(path, f"{ctx}.then.tool", "must be a mapping")
             action = _require(path, body, "action", f"{ctx}.then.tool")
-            if action not in ACTIONS:
+            if action not in known:
                 raise _err(path, f"{ctx}.then.tool.action",
-                           f"unknown action {action!r}")
+                           f"unknown action(s) {[action]} "
+                           f"(known: {sorted(known)})")
             untracked = body.get("untracked", False)
             if not isinstance(untracked, bool):
                 raise _err(path, f"{ctx}.then.tool.untracked",
                            "must be a boolean")
+            if untracked and body.get("as_principal") is not None:
+                raise _err(path, f"{ctx}.then.tool",
+                           "untracked and as_principal are mutually "
+                           "exclusive (an untracked call has no envelope "
+                           "to re-stamp)")
+            _check_as_principal(path, body, f"{ctx}.then.tool")
             templates = [str(v) for v in (body.get("args") or {}).values()]
+            if body.get("as_principal") is not None:
+                templates.append(str(body["as_principal"]))
         else:  # return
             if not isinstance(body, str):
                 raise _err(path, f"{ctx}.then.return", "must be a string")

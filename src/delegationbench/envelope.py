@@ -77,3 +77,18 @@ class Envelope:
         if self.signing_key is not None:
             child = child.sign(self.signing_key)
         return child
+
+    def with_principal(self, principal: str) -> "Envelope":
+        """Copy stamped with a different principal (V7 modeling).
+
+        The orchestrator is the trusted stamper of principals — and it can
+        be *deceived* into stamping another principal's identity onto an
+        envelope (cross-user context confusion). It holds the signing key,
+        so the substituted envelope is re-signed and still verifies: a
+        signature proves the envelope was issued by the orchestrator, not
+        that the principal is the one who issued the root task.
+        """
+        substituted = replace(self, principal=principal, signature="")
+        if self.signing_key is not None:
+            substituted = substituted.sign(self.signing_key)
+        return substituted

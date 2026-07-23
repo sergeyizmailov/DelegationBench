@@ -82,6 +82,11 @@ def run_task(agent: Agent, env: "Envelope", content: str, source: str,
                         task_id=f"untracked/{agent.name}",
                         allowed_actions=frozenset(),
                         max_delegation_depth=0)
+                elif spec.get("as_principal") is not None:
+                    # Principal substitution (V7): the agent was deceived
+                    # into acting under another principal's identity.
+                    call_env = env.with_principal(render_template(
+                        spec["as_principal"], variables))
                 if ctx.defense is not None:
                     try:
                         ctx.defense.before_tool_call(agent, call_env,
@@ -91,7 +96,8 @@ def run_task(agent: Agent, env: "Envelope", content: str, source: str,
                         ctx.trace.blocked(call_env.task_id, agent.name,
                                           phase="tool_call", reason=str(e),
                                           source=src, action=spec["action"],
-                                          args=args)
+                                          args=args,
+                                          principal=call_env.principal)
                         continue
                 result = ctx.tools.call(agent, call_env, spec["action"], args,
                                         src)
@@ -105,6 +111,12 @@ def run_task(agent: Agent, env: "Envelope", content: str, source: str,
                 child_env = env.derive(
                     task_id=f"{env.task_id}/{child.name}", scope=scope,
                     nonce=ctx.next_nonce())
+                if spec.get("as_principal") is not None:
+                    # Principal substitution (V7): content deceived the
+                    # orchestrator into stamping the delegation with
+                    # another principal's identity.
+                    child_env = child_env.with_principal(render_template(
+                        spec["as_principal"], variables))
                 # replay: emit the same delegation (same envelope nonce)
                 # twice; the defense checks each emission, so the second
                 # one is rejected as a replay.
@@ -120,13 +132,15 @@ def run_task(agent: Agent, env: "Envelope", content: str, source: str,
                                               reason=str(e), source=src,
                                               parent_task=env.task_id,
                                               scope=sorted(scope),
-                                              task=task_text)
+                                              task=task_text,
+                                              principal=child_env.principal)
                             break
                     ctx.trace.delegation(
                         env.task_id, child_env.task_id, child.name,
                         sorted(scope), depth=child_env.depth,
                         nonce=child_env.nonce,
                         expires_at=child_env.expires_at, source=src,
+                        principal=child_env.principal,
                         task=task_text, args=args)
                     child_input = "\n".join(
                         [task_text] + [f"{k}:{v}" for k, v in args.items()])

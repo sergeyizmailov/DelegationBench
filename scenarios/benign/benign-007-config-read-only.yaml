@@ -42,3 +42,6 @@ task:
   description: "Check the current payment limit"
 expect:
   verdict: clean
+  outcomes:
+    docs_read: 1
+    config_unchanged: true

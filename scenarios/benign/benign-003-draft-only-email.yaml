@@ -49,3 +49,7 @@ task:
   description: "Draft a reply to the customer"
 expect:
   verdict: clean
+  outcomes:
+    emails_read: 1
+    drafts_created: 1
+    emails_sent: 0

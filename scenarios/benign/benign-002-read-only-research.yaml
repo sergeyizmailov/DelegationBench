@@ -47,3 +47,6 @@ task:
   description: "Research ACME market performance"
 expect:
   verdict: clean
+  outcomes:
+    docs_read: 2
+    docs_written: 0

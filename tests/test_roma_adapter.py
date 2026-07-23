@@ -217,3 +217,121 @@ def test_callback_agent_and_envelope_pulled_from_authority_map():
     assert call.agent == "reader"
     assert call.nonce == "n-1"
     assert call.expires_at == 3600.0
+
+
+# -- post-hoc capture ordering (FIX: tool events precede delegations) --------
+
+def test_tool_first_delegation_later_is_normalized():
+    # The ROMA example registers the task DAG AFTER execution, so tool
+    # calls are captured before the delegation that authorizes them.
+    # build_trace must emit each task's delegation before its tool
+    # events, or authorized calls read as V5.
+    events = [
+        AdapterEvent("delegation", "t-root", parent_task=None,
+                     agent="orchestrator", scope=("docs.read",),
+                     nonce="n-root"),
+        AdapterEvent("tool_call", "t-pay", agent="payment",
+                     action="docs.read", args={"doc_id": "inv-2041"}),
+        AdapterEvent("tool_result", "t-pay", agent="payment",
+                     action="docs.read", result="invoice body"),
+        AdapterEvent("delegation", "t-pay", parent_task="t-root",
+                     agent="payment", scope=("docs.read",), nonce="n-1"),
+    ]
+    trace = build_trace(events, GRANT)
+    kinds = [(e.kind, e.task_id) for e in trace.events]
+    assert kinds == [("delegation", "t-root"), ("delegation", "t-pay"),
+                     ("tool_call", "t-pay"), ("tool_result", "t-pay")]
+    verdict = run_oracle(trace, GRANT)
+    assert not verdict.violation
+    assert "V5" not in verdict.kinds
+
+
+def test_delegations_reordered_parents_before_children():
+    # A grandchild delegation captured before its parent is emitted
+    # after it (topological), with depths derived from the chain.
+    events = [
+        AdapterEvent("delegation", "root", parent_task=None, agent="a",
+                     scope=("docs.read",), nonce="n-0"),
+        AdapterEvent("delegation", "leaf", parent_task="mid", agent="c",
+                     scope=("docs.read",), nonce="n-2"),
+        AdapterEvent("delegation", "mid", parent_task="root", agent="b",
+                     scope=("docs.read",), nonce="n-1"),
+        AdapterEvent("tool_call", "leaf", agent="c", action="docs.read",
+                     args={"doc_id": "x"}),
+    ]
+    trace = build_trace(events, GRANT)
+    assert [e.task_id for e in trace.events
+            if e.kind == "delegation"] == ["root", "mid", "leaf"]
+    assert [e.detail["depth"] for e in trace.events
+            if e.kind == "delegation"] == [0, 1, 2]
+    verdict = run_oracle(trace, GRANT)
+    assert not verdict.violation
+
+
+# -- concurrent sibling correlation (context-keyed module stack) --------------
+
+def test_callback_interleaved_siblings_attribute_to_own_invocation():
+    # start A, start B, tool from A: a single global stack misattributes
+    # the tool to B. Per-context stacks attribute it to A.
+    import contextvars
+    cb = ROMATraceCallback()
+    cb.register_task("tA", None, "reader", ["docs.read"])
+    cb.register_task("tB", "tA", "payment", ["docs.read"])
+    ctx_a = contextvars.copy_context()
+    ctx_b = contextvars.copy_context()
+    ctx_a.run(cb.on_module_start, "mA", None,
+              {"task": SimpleNamespace(task_id="tA")})
+    ctx_b.run(cb.on_module_start, "mB", None,
+              {"task": SimpleNamespace(task_id="tB")})
+    ctx_a.run(cb.on_tool_start, "c1",
+              SimpleNamespace(name="docs.read"), {"doc_id": "x"})
+    ctx_b.run(cb.on_tool_start, "c2",
+              SimpleNamespace(name="docs.read"), {"doc_id": "y"})
+    calls = [e for e in cb.events if e.kind == "tool_call"]
+    assert [c.task_id for c in calls] == ["tA", "tB"]
+
+
+def test_callback_async_gather_siblings_attribute_correctly():
+    # The real ROMA shape: sibling subtasks driven by asyncio.gather.
+    import asyncio
+    cb = ROMATraceCallback()
+    cb.register_task("tA", None, "reader", ["docs.read"])
+    cb.register_task("tB", "tA", "payment", ["docs.read"])
+
+    async def sibling(task_id, mid, cid):
+        cb.on_module_start(mid, None,
+                           {"task": SimpleNamespace(task_id=task_id)})
+        await asyncio.sleep(0)  # yield so siblings interleave
+        cb.on_tool_start(cid, SimpleNamespace(name="docs.read"), {})
+        cb.on_tool_end(cid, outputs="ok")
+        cb.on_module_end(mid, outputs="done")
+
+    async def main():
+        await asyncio.gather(sibling("tA", "mA", "cA"),
+                             sibling("tB", "mB", "cB"))
+
+    asyncio.run(main())
+    calls = [e for e in cb.events if e.kind == "tool_call"]
+    results = [e for e in cb.events if e.kind == "tool_result"]
+    # cA fired after BOTH module starts: a global stack would say tB.
+    assert [c.task_id for c in calls] == ["tA", "tB"]
+    assert [r.task_id for r in results] == ["tA", "tB"]
+
+
+def test_callback_tool_outside_any_module_context_is_uncorrelated():
+    # Truly ambiguous: a tool event delivered in a context with no active
+    # module frame (while another context HAS one) must fall back to
+    # "uncorrelated" — wrong attribution is worse than none.
+    import contextvars
+    cb = ROMATraceCallback()
+    cb.register_task("tA", None, "reader", ["docs.read"])
+    ctx_a = contextvars.copy_context()
+    ctx_a.run(cb.on_module_start, "mA", None,
+              {"task": SimpleNamespace(task_id="tA")})
+    cb.on_tool_start("c1", SimpleNamespace(name="docs.read"), {})
+    cb.on_tool_end("c1", outputs="ok")
+    call = next(e for e in cb.events if e.kind == "tool_call")
+    assert call.task_id == UNCORRELATED
+    verdict = cb.run_oracle({"allowed_actions": ["docs.read"],
+                             "max_delegation_depth": 2})
+    assert "V5" in verdict.kinds
