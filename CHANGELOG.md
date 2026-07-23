@@ -39,4 +39,4 @@ Initial public release.
 - **CI** — GitHub Actions: pytest plus full corpus runs with and without the
   reference defense, on Python 3.10/3.12/3.13.
 
-[0.1.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.1.0
+[0.1.0]: https://github.com/sergeyizmailov/DelegationBench/releases/tag/v0.1.0

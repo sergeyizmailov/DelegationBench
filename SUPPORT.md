@@ -5,14 +5,14 @@ best-effort basis.
 
 ## Questions and ideas
 
-Use [GitHub Discussions](https://github.com/sergeyizmailov/delegationbench/discussions)
+Use [GitHub Discussions](https://github.com/sergeyizmailov/DelegationBench/discussions)
 for usage questions, framework-integration ideas, and open-ended design
 discussion. Search existing discussions before starting a new one.
 
 ## Bugs and scenario proposals
 
 Use the repository's structured
-[issue forms](https://github.com/sergeyizmailov/delegationbench/issues/new/choose).
+[issue forms](https://github.com/sergeyizmailov/DelegationBench/issues/new/choose).
 Include the command, version or commit, scenario or fuzz seed, expected result,
 actual result, and JSON trace when available.
 
@@ -20,7 +20,7 @@ actual result, and JSON trace when available.
 
 Do not disclose vulnerabilities in an issue or public discussion. Follow
 [SECURITY.md](SECURITY.md) and use GitHub's
-[private vulnerability reporting](https://github.com/sergeyizmailov/delegationbench/security/advisories/new).
+[private vulnerability reporting](https://github.com/sergeyizmailov/DelegationBench/security/advisories/new).
 
 ## Scope
 

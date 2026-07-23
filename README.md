@@ -3,10 +3,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/sergeyizmailov/delegationbench/actions/workflows/delegationbench.yml"><img src="https://github.com/sergeyizmailov/delegationbench/actions/workflows/delegationbench.yml/badge.svg?branch=main" alt="CI"></a>
-  <a href="https://github.com/sergeyizmailov/delegationbench/security/code-scanning"><img src="https://github.com/sergeyizmailov/delegationbench/actions/workflows/github-code-scanning/codeql/badge.svg" alt="CodeQL"></a>
-  <a href="https://github.com/sergeyizmailov/delegationbench/releases/latest"><img src="https://img.shields.io/github/v/release/sergeyizmailov/delegationbench" alt="Latest release"></a>
-  <a href="https://github.com/sergeyizmailov/delegationbench/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+  <a href="https://github.com/sergeyizmailov/DelegationBench/actions/workflows/delegationbench.yml"><img src="https://github.com/sergeyizmailov/DelegationBench/actions/workflows/delegationbench.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/sergeyizmailov/DelegationBench/security/code-scanning"><img src="https://github.com/sergeyizmailov/DelegationBench/actions/workflows/github-code-scanning/codeql/badge.svg" alt="CodeQL"></a>
+  <a href="https://github.com/sergeyizmailov/DelegationBench/releases/latest"><img src="https://img.shields.io/github/v/release/sergeyizmailov/DelegationBench" alt="Latest release"></a>
+  <a href="https://github.com/sergeyizmailov/DelegationBench/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
 </p>
 
 <p align="center">
@@ -45,14 +45,14 @@ Install the current release directly from GitHub:
 
 ```bash
 python -m pip install \
-  "delegationbench @ git+https://github.com/sergeyizmailov/delegationbench.git@v0.1.0"
+  "delegationbench @ git+https://github.com/sergeyizmailov/DelegationBench.git@v0.1.0"
 ```
 
 Or install an editable checkout for development:
 
 ```bash
-git clone https://github.com/sergeyizmailov/delegationbench.git
-cd delegationbench
+git clone https://github.com/sergeyizmailov/DelegationBench.git
+cd DelegationBench
 pip install -e .
 ```
 
@@ -224,7 +224,7 @@ Contributions welcome — new attack scenarios are the best first contribution.
 See [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), and the
 [threat model](THREAT_MODEL.md). Security issues: [SECURITY.md](SECURITY.md)
 (private reporting, please). For questions, use [GitHub
-Discussions](https://github.com/sergeyizmailov/delegationbench/discussions) or
+Discussions](https://github.com/sergeyizmailov/DelegationBench/discussions) or
 see [SUPPORT.md](SUPPORT.md). If you use DelegationBench in research, see
 [CITATION.cff](CITATION.cff).
 

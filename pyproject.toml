@@ -31,10 +31,10 @@ classifiers = [
 dependencies = ["PyYAML>=6.0"]
 
 [project.urls]
-Homepage = "https://github.com/sergeyizmailov/delegationbench"
-Repository = "https://github.com/sergeyizmailov/delegationbench"
-Issues = "https://github.com/sergeyizmailov/delegationbench/issues"
-Changelog = "https://github.com/sergeyizmailov/delegationbench/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/sergeyizmailov/DelegationBench"
+Repository = "https://github.com/sergeyizmailov/DelegationBench"
+Issues = "https://github.com/sergeyizmailov/DelegationBench/issues"
+Changelog = "https://github.com/sergeyizmailov/DelegationBench/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 # Optional framework adapter. Targets the LangGraph 1.x /
