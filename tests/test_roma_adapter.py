@@ -199,12 +199,38 @@ def test_callback_uncorrelated_fallback_outside_module_context():
 
 
 def test_callback_unpaired_tool_end_kept_visible():
+    # An unmatched tool_result must surface as a trace-visible anomaly:
+    # a synthetic tool_call on the uncorrelated task (action "unknown",
+    # source marked) precedes the result, so the oracle judges V5
+    # origin loss instead of the run reading as clean.
     cb = ROMATraceCallback()
     cb.on_tool_end("ghost", exception=RuntimeError("boom"))
-    (e,) = cb.events
-    assert e.kind == "tool_result"
-    assert e.task_id == UNCORRELATED
-    assert "boom" in e.result
+    assert [(e.kind, e.task_id) for e in cb.events] == [
+        ("tool_call", UNCORRELATED), ("tool_result", UNCORRELATED)]
+    call, result = cb.events
+    assert call.action == "unknown"
+    assert call.source == "tool_result"
+    assert "boom" in result.result
+    verdict = cb.run_oracle({"allowed_actions": ["docs.read"],
+                             "max_delegation_depth": 2})
+    assert verdict.violation
+    assert "V5" in verdict.kinds
+
+
+def test_unpaired_tool_result_built_trace_flags_v5():
+    # Same anomaly through build_trace: the synthetic call is emitted
+    # before the result, both on the uncorrelated task.
+    cb = ROMATraceCallback()
+    cb.register_task("t-root", None, "orchestrator", ["docs.read"])
+    cb.on_tool_end("ghost", outputs="stray result")
+    trace = cb.build_trace({"allowed_actions": ["docs.read"],
+                            "max_delegation_depth": 2})
+    kinds = [(e.kind, e.task_id) for e in trace.events]
+    assert ("tool_call", UNCORRELATED) in kinds
+    assert ("tool_result", UNCORRELATED) in kinds
+    verdict = run_oracle(trace, {"allowed_actions": ["docs.read"],
+                                 "max_delegation_depth": 2})
+    assert "V5" in verdict.kinds
 
 
 def test_callback_agent_and_envelope_pulled_from_authority_map():
@@ -335,3 +361,65 @@ def test_callback_tool_outside_any_module_context_is_uncorrelated():
     verdict = cb.run_oracle({"allowed_actions": ["docs.read"],
                              "max_delegation_depth": 2})
     assert "V5" in verdict.kinds
+
+
+# -- principal propagation (Event.principal / V7) ---------------------------
+
+def test_register_task_and_callback_stamp_principal():
+    cb = ROMATraceCallback(principal="user-123")
+    cb.register_task("t-root", None, "orchestrator", ["docs.read"])
+    cb.register_task("t-sub", "t-root", "payment", ["docs.read"],
+                     principal="user-123")
+    cb.on_module_start("m1", None, {"task": SimpleNamespace(task_id="t-sub")})
+    cb.on_tool_start("c1", SimpleNamespace(name="docs.read"), {"doc_id": "x"})
+    cb.on_tool_end("c1", outputs="ok")
+    for e in cb.events:
+        assert e.principal == "user-123", (e.kind, e.task_id)
+    grant = {"allowed_actions": ["docs.read"], "max_delegation_depth": 2,
+             "principal": "user-123"}
+    trace = cb.build_trace(grant)
+    assert trace.events
+    for e in trace.events:
+        assert e.principal == "user-123", (e.kind, e.task_id)
+    verdict = run_oracle(trace, grant)
+    assert not verdict.violation
+    assert "V7" not in verdict.kinds
+
+
+def test_build_trace_child_inherits_parent_principal():
+    # Only the root delegation carries an explicit principal; the child
+    # delegation and its tool events inherit it in build_trace.
+    events = [
+        AdapterEvent("delegation", "root", parent_task=None, agent="a",
+                     scope=("docs.read",), nonce="n-0",
+                     principal="user-123"),
+        AdapterEvent("delegation", "child", parent_task="root", agent="b",
+                     scope=("docs.read",), nonce="n-1"),
+        AdapterEvent("tool_call", "child", agent="b", action="docs.read",
+                     args={"doc_id": "x"}),
+        AdapterEvent("tool_result", "child", agent="b", action="docs.read",
+                     result="body"),
+    ]
+    grant = dict(GRANT, principal="user-123")
+    trace = build_trace(events, grant)
+    assert [e.principal for e in trace.events] == ["user-123"] * 4
+    verdict = run_oracle(trace, grant)
+    assert "V7" not in verdict.kinds
+
+
+def test_build_trace_foreign_principal_flagged_v7():
+    events = attack_events()
+    events[3].principal = "attacker"   # the payment handoff
+    grant = dict(GRANT, principal="user-123")
+    trace = build_trace(events, grant)
+    handoff = next(e for e in trace.events
+                   if e.kind == "delegation" and e.task_id == "t-pay")
+    assert handoff.principal == "attacker"
+    # The child's tool events carry no principal of their own: they
+    # inherit the (substituted) principal of their task.
+    child_calls = [e for e in trace.events
+                   if e.kind == "tool_call" and e.task_id == "t-pay"]
+    assert child_calls and all(e.principal == "attacker"
+                               for e in child_calls)
+    verdict = run_oracle(trace, grant)
+    assert "V7" in verdict.kinds

@@ -251,3 +251,84 @@ task:
     })
     assert not verdict.violation
     assert len(verdict.blocked) == 1
+
+
+# -- V7 enforcement in the guard (review FIX 2) ---------------------------------
+
+ATTACK_016 = ATTACKS_DIR / "attack-016-principal-substitution-in-grant.yaml"
+
+
+def make_guard_with_principal(principal: str, now: float = 0.0,
+                              key: bytes | None = None):
+    clock = VirtualClock()
+    clock.now = now
+    guard = EnvelopeGuard(signing_key=key)
+    guard.bind(clock, GRANT_ACTIONS, principal)
+    return guard, clock
+
+
+def test_blocks_principal_substitution_on_delegation():
+    """The review's probe: parent user-a, child stamped user-b, and the
+    requested action IS within the grant — previously ACCEPTED, now
+    blocked as V7 at the delegation boundary."""
+    guard, _ = make_guard_with_principal("user-a")
+    parent = make_root_env(principal="user-a")
+    child = parent.derive("root/helper", scope={"docs.read"},
+                          nonce="nonce-1").with_principal("user-b")
+    with pytest.raises(BlockedError, match="V7"):
+        guard.before_delegation(AGENT, parent, child, "read the doc",
+                                frozenset({"docs.read"}))
+
+
+def test_blocks_principal_substitution_on_tool_call():
+    guard, _ = make_guard_with_principal("user-a")
+    env = make_root_env(principal="user-a").with_principal("user-b")
+    with pytest.raises(BlockedError, match="V7"):
+        guard.before_tool_call(AGENT, env, "docs.read", {"doc_id": "x"},
+                               "document")
+
+
+def test_matching_principal_accepted():
+    guard, _ = make_guard_with_principal("user-a")
+    parent = make_root_env(principal="user-a")
+    child = parent.derive("root/helper", scope={"docs.read"},
+                          nonce="nonce-1")
+    guard.before_delegation(AGENT, parent, child, "read the doc",
+                            frozenset({"docs.read"}))
+    guard.before_tool_call(AGENT, make_root_env(principal="user-a"),
+                           "docs.read", {"doc_id": "x"}, "document")
+
+
+def test_signed_substituted_envelope_still_blocked():
+    """A substituted envelope is re-signed by the orchestrator, so the
+    signature verifies — the principal check is what stops it."""
+    guard, _ = make_guard_with_principal("user-a", key=KEY)
+    env = make_root_env(principal="user-a").sign(KEY) \
+        .with_principal("user-b")
+    assert env.verify(KEY)  # signature alone cannot catch substitution
+    with pytest.raises(BlockedError, match="V7"):
+        guard.before_tool_call(AGENT, env, "docs.read", {"doc_id": "x"},
+                               "document")
+
+
+def test_guard_without_bound_principal_skips_v7():
+    """No principal bound -> no principal claim to enforce (legacy
+    two-argument bind)."""
+    guard, _ = make_guard()
+    env = make_root_env(principal="user-b")
+    guard.before_tool_call(AGENT, env, "docs.read", {"doc_id": "x"},
+                           "document")
+
+
+def test_attack_016_contained_via_v7_block():
+    """attack-016: substitution where every action is in-grant. The guard
+    blocks the substituted delegation (phase=delegation, V7 reason) and
+    the oracle sees no violation."""
+    scn, result, verdict = run_with_defense(ATTACK_016)
+    assert not verdict.violation
+    assert verdict.blocked
+    assert any(b["phase"] == "delegation" and "V7" in b["reason"]
+               for b in verdict.blocked)
+    report = build_report(result, verdict, defense="envelope")
+    assert report["defense_outcome"] == "contained"
+    assert report["expect_match"] is True

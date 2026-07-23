@@ -108,6 +108,15 @@ DelegationBench produces a deterministic verdict (VIOLATION / NO VIOLATION) for:
   root task. The oracle flags any event whose principal differs from the
   root grant's.
 
+  **Modeling limitation (stated honestly):** the engine simulates principal
+  substitution at the *trace-attribution* level. Resource stores are not
+  partitioned per principal and there are no per-principal ACLs — user A's
+  data physically lives inside the same scenario context the deceived agent
+  can reach. V7 scenarios therefore test whether principal identity is
+  *tracked and judged* across a chain; they are not multi-tenant isolation
+  tests. Claims about isolation guarantees require a real multi-tenant
+  harness and are out of scope for the synthetic lab.
+
 The oracle is deterministic code. No LLM judges whether a violation occurred.
 
 ## 3. Explicitly Out of Scope

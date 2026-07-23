@@ -19,7 +19,10 @@
 
 # DelegationBench
 
-Open crash tests for authority escalation across AI agent handoffs.
+DelegationBench is an **open, deterministic security testbed for unsafe agent
+handoffs and authority escalation across multi-agent systems**. It gives
+developers and evaluators reproducible tests for checking whether delegated
+agents stay within the authority originally granted by the user.
 
 DelegationBench is a security testbed that detects when a low-authority agent
 causes a higher-authority agent to perform an action the originating user never
@@ -95,7 +98,7 @@ straight into CI (see the [project workflow](.github/workflows/delegationbench.y
 | | DelegationBench |
 |---|---|
 | **Tests** | Cross-agent authority propagation, confused-deputy behavior, delegation depth, expiry/replay, origin continuity, and result-driven scope widening |
-| **Corpus** | 15 attack scenarios + 15 benign lookalikes |
+| **Corpus** | 16 attack scenarios + 15 benign lookalikes |
 | **Judge** | Deterministic authorization oracle; no LLM judge |
 | **Defense baseline** | Tool-boundary delegation envelopes with optional HMAC integrity |
 | **Outputs** | Human-readable terminal reports and machine-readable JSON |
@@ -110,7 +113,7 @@ straight into CI (see the [project workflow](.github/workflows/delegationbench.y
   V1 authority expansion on handoff · V2 confused deputy · V3 depth violation ·
   V4 expired/replayed delegation · V5 origin loss · V6 scope widening via result ·
   V7 principal substitution.
-- **30-scenario corpus** — 15 attacks, each paired with benign lookalikes that
+- **31-scenario corpus** — 16 attacks, each paired with benign lookalikes that
   must stay clean (a defense that blocks everything is a failure, not a win).
 - **Reference defense** — a delegation-envelope guard enforced at the tool
   boundary, outside model reasoning: `--defense envelope` (attenuation-only
@@ -135,10 +138,14 @@ straight into CI (see the [project workflow](.github/workflows/delegationbench.y
 
 - **Reports** — terminal (human) and `--format json` (machine) with per-scenario
   verdicts, full traces, and corpus metrics: Unauthorized Action Rate, Attack
-  Containment Rate, Benign Task Success Rate. Benign Task Success Rate measures
-  verified task completion — zero blocks AND the scenario's `expect.outcomes`
-  assertions on the final tool/store state met — so an agent that does nothing
-  does not score as a success.
+  Containment Rate, Benign Task Success Rate. Unauthorized Action Rate is
+  reported as *attempted* (the tool call was traced, whatever the outcome)
+  with an *executed* sub-count where the tool result shows the call actually
+  ran, so an attempt refused by the mock world (e.g. a payment over the
+  configured limit) is never conflated with an executed action. Benign Task
+  Success Rate measures verified task completion — zero blocks AND the
+  scenario's `expect.outcomes` assertions on the final tool/store state met —
+  so an agent that does nothing does not score as a success.
 
 ## How it works
 
@@ -152,7 +159,7 @@ flowchart LR
     A -->|"execution trace"| O
     B -->|"execution trace"| O
     T -->|"execution trace"| O
-    O -->|"PASS or violation V1–V6"| R["Reproducible report"]
+    O -->|"PASS or violation V1–V7"| R["Reproducible report"]
 ```
 
 The runner records delegation and tool events. The oracle reconstructs effective
@@ -206,7 +213,7 @@ authorized it. Per-agent permission checks miss this; the oracle does not.
 
 ```
 src/delegationbench/   # package: scenario, runner, oracle, defense, fuzzer, report, cli
-scenarios/attacks/     # 15 attack scenarios
+scenarios/attacks/     # 16 attack scenarios
 scenarios/benign/      # 15 benign lookalikes
 tests/                 # pytest suite
 experiments/           # original minimal proof-of-concept (kept for reference)

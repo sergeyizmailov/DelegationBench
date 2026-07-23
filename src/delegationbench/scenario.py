@@ -22,14 +22,23 @@ Schema v1 field notes:
   the orchestrator is deceived into acting under another principal's
   identity; the orchestrator holds the signing key, so a substituted
   envelope still verifies (models V7, principal substitution).
-- ``expect.outcomes`` (mapping, optional): assertions on the final
-  tool/store state, so a benign scenario only counts as a success when
-  the task's side effects actually happened. Keys are the tool layer's
-  generic per-store counters (``docs_read``, ``docs_written``,
-  ``emails_read``, ``emails_sent``, ``drafts_created``,
-  ``payments_prepared``, ``payments_executed`` — non-negative integers)
-  plus ``config_unchanged`` (boolean: the config store equals its
-  initial state). Only declared keys are checked.
+- ``expect.outcomes`` (mapping, optional for attacks, REQUIRED for
+  ``type: benign``): assertions on the final tool/store state, so a
+  benign scenario only counts as a success when the task's side effects
+  actually happened. Keys are the tool layer's generic per-store
+  counters (``docs_read``, ``docs_written``, ``emails_read``,
+  ``emails_sent``, ``drafts_created``, ``payments_prepared``,
+  ``payments_executed`` — non-negative integers) plus
+  ``config_unchanged`` (boolean: the config store equals its initial
+  state). Only declared keys are checked.
+- ``expect.allow_additional`` (bool, default false): opt back into
+  subset matching for ``violation_kinds`` / ``unauthorized_actions``.
+  By default the expect contract must match the oracle's findings
+  EXACTLY — subset matching hides regressions.
+- ``agents.<name>.rules[].then.delegate.agent`` may not name the agent
+  itself: direct self-delegation loops are rejected at load time.
+  Longer cycles are data-driven and are caught at run time by the
+  engine's delegation-chain budget (``agents.EngineError``).
 - ``actions`` (list of action ids, optional): scenario-declared custom
   actions extending the built-in registry. Every action referenced
   anywhere in the scenario (grant, capabilities, delegation scopes, tool
@@ -90,6 +99,9 @@ class Expect:
     violation_kinds: list[str] = field(default_factory=list)
     unauthorized_actions: list[str] = field(default_factory=list)
     outcomes: dict = field(default_factory=dict)  # final tool-state assertions
+    # Opt back into subset matching (declared kinds/actions may be a
+    # proper subset of the oracle's findings). Default is exact matching.
+    allow_additional: bool = False
 
 
 @dataclass
@@ -224,13 +236,21 @@ def _parse(path: Path, d: dict) -> Scenario:
     task = TaskSpec(agent=root_agent, read=read,
                     description=str(t.get("description", "")))
 
-    # delegation targets must exist (checked after all agents parsed)
+    # delegation targets must exist (checked after all agents parsed);
+    # a rule that delegates to the agent itself is a direct
+    # self-delegation loop and is rejected statically (deeper cycles are
+    # data-driven and are caught by the engine's delegation-chain budget
+    # at run time — agents.EngineError).
     for aname, agent in agents.items():
         for i, rule in enumerate(agent.rules):
             target = rule.then.get("delegate", {}).get("agent")
             if target is not None and target not in agents:
                 raise _err(path, f"agents.{aname}.rules[{i}].then.delegate",
                            f"unknown agent {target!r}")
+            if target is not None and target == aname:
+                raise _err(path, f"agents.{aname}.rules[{i}].then.delegate",
+                           f"self-delegation loop: agent {aname!r} "
+                           "delegates to itself")
 
     # expect
     expect = None
@@ -249,8 +269,24 @@ def _parse(path: Path, d: dict) -> Scenario:
                                 "expect.unauthorized_actions", known)
         outcomes = _check_outcomes(path, e.get("outcomes"),
                                    "expect.outcomes")
+        allow_additional = e.get("allow_additional", False)
+        if not isinstance(allow_additional, bool):
+            raise _err(path, "expect.allow_additional", "must be a boolean")
         expect = Expect(verdict=verdict, violation_kinds=kinds,
-                        unauthorized_actions=unauth, outcomes=outcomes)
+                        unauthorized_actions=unauth, outcomes=outcomes,
+                        allow_additional=allow_additional)
+
+    # A benign scenario only counts as a success when the task's side
+    # effects actually happened, so expect.outcomes is REQUIRED for
+    # type: benign — without it there is nothing to verify against.
+    if scn_type == "benign":
+        if expect is None:
+            raise _err(path, "expect", "missing required key 'expect' "
+                       "(type: benign must declare expect.outcomes)")
+        if not expect.outcomes:
+            raise _err(path, "expect.outcomes", "missing required field "
+                       "'outcomes' (type: benign must assert the final "
+                       "tool/store state)")
 
     # payment.execute needs a payment_limit to enforce: the config value
     # must exist and be an integer.

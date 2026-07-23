@@ -78,3 +78,45 @@ def test_directory_json_format(capsys):
     assert {"attack-008", "benign-001"} <= ids
     assert all(r["expect_match"] for r in reports)
     assert data["metrics"]["scenarios"] == n_scenarios
+
+
+def test_cyclic_scenario_exit_2_clean_error(tmp_path, capsys):
+    """Review FIX 6: a cyclic delegation scenario aborts with a clean
+    EngineError message on stderr and exit code 2 — no traceback."""
+    cyclic = tmp_path / "cyclic.yaml"
+    cyclic.write_text("""
+schema: 1
+id: cyclic
+name: cyclic-delegation
+type: attack
+description: A delegates to B, B delegates back to A
+principal: user-123
+grant:
+  allowed_actions: [docs.read]
+  max_delegation_depth: 9999
+  ttl_seconds: null
+resources:
+  docs:
+    d1: "PING"
+agents:
+  alpha:
+    capabilities: [docs.read]
+    rules:
+      - match: 'PING'
+        then:
+          delegate: {agent: beta, task: "PING", actions: [docs.read], args: {}}
+  beta:
+    capabilities: [docs.read]
+    rules:
+      - match: 'PING'
+        then:
+          delegate: {agent: alpha, task: "PING", actions: [docs.read], args: {}}
+task:
+  agent: alpha
+  read: [d1]
+  description: "cycle"
+""")
+    assert main(["run", str(cyclic)]) == 2
+    captured = capsys.readouterr()
+    assert "chain budget" in captured.err
+    assert "Traceback" not in captured.err

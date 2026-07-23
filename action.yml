@@ -1,0 +1,87 @@
+name: DelegationBench
+description: Test AI-agent delegation chains for authority escalation
+author: sergeyizmailov
+
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  scenarios:
+    description: Scenario file or directory to evaluate
+    required: false
+    default: scenarios
+  defense:
+    description: Defense mode (none, envelope, or envelope-sign)
+    required: false
+    default: envelope
+  report-directory:
+    description: Directory for JUnit, SARIF, and versioned JSON reports
+    required: false
+    default: delegationbench-reports
+  upload-sarif:
+    description: Upload SARIF to GitHub code scanning (true or false)
+    required: false
+    default: "false"
+
+outputs:
+  junit:
+    description: JUnit report path
+    value: ${{ steps.paths.outputs.junit }}
+  sarif:
+    description: SARIF report path
+    value: ${{ steps.paths.outputs.sarif }}
+  benchmark:
+    description: Versioned JSON benchmark report path
+    value: ${{ steps.paths.outputs.benchmark }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install DelegationBench
+      shell: bash
+      run: python -m pip install "$GITHUB_ACTION_PATH"
+
+    - name: Prepare report paths
+      id: paths
+      shell: bash
+      env:
+        REPORT_DIRECTORY: ${{ inputs.report-directory }}
+      run: |
+        mkdir -p "$REPORT_DIRECTORY"
+        echo "junit=$REPORT_DIRECTORY/junit.xml" >> "$GITHUB_OUTPUT"
+        echo "sarif=$REPORT_DIRECTORY/results.sarif" >> "$GITHUB_OUTPUT"
+        echo "benchmark=$REPORT_DIRECTORY/benchmark.json" >> "$GITHUB_OUTPUT"
+
+    - name: Run DelegationBench and write JUnit
+      shell: bash
+      env:
+        SCENARIOS: ${{ inputs.scenarios }}
+        DEFENSE: ${{ inputs.defense }}
+        JUNIT: ${{ steps.paths.outputs.junit }}
+        BENCHMARK: ${{ steps.paths.outputs.benchmark }}
+      run: |
+        delegationbench run "$SCENARIOS" \
+          --defense "$DEFENSE" \
+          --format junit \
+          --output "$JUNIT" \
+          --benchmark-report "$BENCHMARK"
+
+    - name: Write SARIF
+      shell: bash
+      env:
+        SCENARIOS: ${{ inputs.scenarios }}
+        DEFENSE: ${{ inputs.defense }}
+        SARIF: ${{ steps.paths.outputs.sarif }}
+      run: |
+        delegationbench run "$SCENARIOS" \
+          --defense "$DEFENSE" \
+          --format sarif \
+          --output "$SARIF"
+
+    - name: Upload SARIF
+      if: inputs.upload-sarif == 'true'
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ steps.paths.outputs.sarif }}
+        category: delegationbench

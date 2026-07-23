@@ -35,6 +35,10 @@ jobs:
     # extra installed so tests/test_integration_langgraph.py executes
     # (it skips otherwise). Unpinned on purpose — gate langgraph
     # upgrades on this job (see pyproject.toml [langgraph] comment).
+    # langchain is installed explicitly as a TEST-ONLY dependency: the
+    # integration test builds agents with langchain.agents.create_agent
+    # (langgraph.prebuilt.create_react_agent is deprecated, removed in
+    # LangGraph v2). The [langgraph] extra itself stays langgraph-only.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -44,7 +48,7 @@ jobs:
           python-version: "3.13"
           cache: pip
       - name: Install
-        run: pip install -e '.[langgraph]' pytest
+        run: pip install -e '.[langgraph]' pytest 'langchain>=1,<2'
       - name: Integration tests (real LangGraph)
         run: python -m pytest tests/ -q
 

@@ -18,6 +18,9 @@ a ``blocked`` event and the action never executes.
 
 - V5 — the issuing task has no delegation path to the root (the guard
   never saw an approved delegation for it).
+- V7 — the envelope's principal differs from the root grant's principal
+  (principal substitution), checked at both the delegation and the
+  tool-call boundary.
 - V4 — the envelope is expired at the current virtual time.
 - V6 — the triggering content is a ``child_result`` and the action lies
   outside the root grant.
@@ -66,14 +69,18 @@ class EnvelopeGuard:
         self.signing_key = signing_key
         self._clock: VirtualClock | None = None
         self._root_grant: frozenset[str] = frozenset()
+        self._root_principal: str | None = None
         self._seen_nonces: set[str] = set()
         self._known_tasks: set[str] = set()
 
-    def bind(self, clock: "VirtualClock", grant_actions) -> None:
+    def bind(self, clock: "VirtualClock", grant_actions,
+             principal: str | None = None) -> None:
         """Called by the runner before the run starts: supplies the virtual
-        clock (for expiry checks) and the root grant (for V6 checks)."""
+        clock (for expiry checks), the root grant (for V6 checks), and the
+        root principal (for V7 checks)."""
         self._clock = clock
         self._root_grant = frozenset(grant_actions)
+        self._root_principal = principal or None
         self._seen_nonces.clear()
         self._known_tasks.clear()
         self._known_tasks.add(ROOT_TASK_ID)
@@ -85,6 +92,7 @@ class EnvelopeGuard:
                           scope: frozenset[str]) -> None:
         self._check_signature(parent)
         self._check_signature(child)
+        self._check_principal(child)
         if not frozenset(scope) <= parent.allowed_actions:
             raise BlockedError(
                 f"V1 authority expansion: task {child.task_id} requested "
@@ -116,6 +124,7 @@ class EnvelopeGuard:
             raise BlockedError(
                 f"V5 origin loss: tool call {action} from task "
                 f"{env.task_id} has no delegation path to the root")
+        self._check_principal(env)
         if env.expires_at is not None and self._now() > env.expires_at:
             raise BlockedError(
                 f"V4 expired tool call: {action} under task {env.task_id} "
@@ -136,6 +145,20 @@ class EnvelopeGuard:
 
     def _now(self) -> float:
         return self._clock.now if self._clock is not None else 0.0
+
+    def _check_principal(self, env: "Envelope") -> None:
+        """V7: the envelope's principal must equal the root grant's.
+
+        Only enforced when the runner bound a root principal; an empty
+        root principal means the run makes no principal claim to check
+        against."""
+        if (self._root_principal is not None
+                and env.principal != self._root_principal):
+            raise BlockedError(
+                f"V7 principal substitution: envelope for task "
+                f"{env.task_id} carries principal {env.principal!r}, "
+                f"but the root grant belongs to "
+                f"{self._root_principal!r}")
 
     def _check_signature(self, env: "Envelope") -> None:
         if self.signing_key is not None and not env.verify(self.signing_key):

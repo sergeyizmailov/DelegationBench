@@ -1,0 +1,23 @@
+name: Delegation security example
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  delegation-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./
+        with:
+          scenarios: scenarios
+          defense: envelope
+          upload-sarif: "false"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: delegationbench-reports
+          path: delegationbench-reports/

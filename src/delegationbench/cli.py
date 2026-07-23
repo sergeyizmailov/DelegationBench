@@ -17,9 +17,12 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .agents import EngineError
 from .defense import EnvelopeGuard, signing_key_from_env
 from .fuzzer import render_campaign_summary, run_campaign
 from .oracle import evaluate
+from .outputs import (benchmark_document, reports_to_junit,
+                      reports_to_sarif, write_json, write_text)
 from .report import (build_report, compute_metrics, render_metrics,
                      render_summary_table, render_terminal)
 from .runner import run_scenario
@@ -52,6 +55,42 @@ def _run_one(path: Path, defense: str) -> dict:
     return build_report(result, verdict, defense=defense)
 
 
+def _emit(data, *, output: str | None, text: bool = False) -> None:
+    if output:
+        path = write_text(data, output) if text else write_json(data, output)
+        print(f"Wrote {path}", file=sys.stderr)
+    elif text:
+        print(data)
+    else:
+        print(json.dumps(data, indent=2, sort_keys=True))
+
+
+def _machine_output(args: argparse.Namespace, reports: list[dict],
+                    metrics: dict, paths: dict[str, str]):
+    if args.format == "json":
+        return {"metrics": metrics, "reports": reports}, False
+    if args.format == "junit":
+        return reports_to_junit(reports), True
+    if args.format == "sarif":
+        return reports_to_sarif(reports, paths), False
+    return None, False
+
+
+def _write_benchmark_report(args: argparse.Namespace, reports: list[dict],
+                            metrics: dict) -> None:
+    if not args.benchmark_report:
+        return
+    document = benchmark_document(
+        reports,
+        metrics,
+        command=["delegationbench", "run", args.path,
+                 "--defense", args.defense],
+        metadata={"defense": args.defense, "source": args.path},
+    )
+    path = write_json(document, args.benchmark_report)
+    print(f"Wrote versioned benchmark report {path}", file=sys.stderr)
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     target = Path(args.path)
     if not target.exists():
@@ -66,16 +105,19 @@ def _cmd_run(args: argparse.Namespace) -> int:
                   file=sys.stderr)
             return EXIT_ERROR
         reports: list[dict] = []
+        paths: dict[str, str] = {}
         rows: list[dict] = []
         had_error = False
         for f in files:
             try:
                 report = _run_one(f, args.defense)
-            except (ScenarioError, ToolError, RunLimitExceeded) as e:
+            except (ScenarioError, ToolError, RunLimitExceeded,
+                    EngineError) as e:
                 print(f"error: {e}", file=sys.stderr)
                 had_error = True
                 continue
             reports.append(report)
+            paths[report["scenario"]["id"]] = str(f)
             expected = (report["expect"]["verdict"]
                         if report["expect"] else "any")
             ok = bool(report["expect_match"])
@@ -85,27 +127,40 @@ def _cmd_run(args: argparse.Namespace) -> int:
                          "outcome": report.get("defense_outcome", "-"),
                          "ok": ok})
         metrics = compute_metrics(reports)
-        if args.format == "json":
-            print(json.dumps({"metrics": metrics, "reports": reports},
-                             indent=2, sort_keys=True))
+        machine, is_text = _machine_output(args, reports, metrics, paths)
+        if machine is not None:
+            _emit(machine, output=args.output, text=is_text)
         else:
-            print(render_summary_table(rows,
-                                       show_defense=args.defense != "none"))
-            print()
-            print(render_metrics(metrics))
+            rendered = (
+                render_summary_table(
+                    rows, show_defense=args.defense != "none")
+                + "\n\n" + render_metrics(metrics)
+            )
+            _emit(rendered, output=args.output, text=True)
+        _write_benchmark_report(args, reports, metrics)
         if had_error:
             return EXIT_ERROR
         return EXIT_MATCH if all(r["ok"] for r in rows) else EXIT_MISMATCH
 
     try:
         report = _run_one(target, args.defense)
-    except (ScenarioError, ToolError, RunLimitExceeded) as e:
+    except (ScenarioError, ToolError, RunLimitExceeded,
+            EngineError) as e:
         print(f"error: {e}", file=sys.stderr)
         return EXIT_ERROR
-    if args.format == "json":
-        print(json.dumps(report, indent=2, sort_keys=True))
+    reports = [report]
+    metrics = compute_metrics(reports)
+    machine, is_text = _machine_output(
+        args, reports, metrics, {report["scenario"]["id"]: str(target)})
+    if machine is not None:
+        # Preserve the historical single-file JSON shape.
+        if args.format == "json":
+            machine = report
+        _emit(machine, output=args.output, text=is_text)
     else:
-        print(render_terminal(report, scenario_path=str(target)))
+        _emit(render_terminal(report, scenario_path=str(target)),
+              output=args.output, text=True)
+    _write_benchmark_report(args, reports, metrics)
     if report["expect_match"] is False:
         return EXIT_MISMATCH
     return EXIT_MATCH
@@ -139,8 +194,15 @@ def build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="run a scenario file or a directory "
                                      "of scenarios")
     run.add_argument("path", help="scenario .yaml file or directory")
-    run.add_argument("--format", choices=("terminal", "json"),
+    run.add_argument("--format", choices=("terminal", "json", "junit",
+                                         "sarif"),
                      default="terminal")
+    run.add_argument("--output",
+                     help="write primary output to this file instead of stdout")
+    run.add_argument(
+        "--benchmark-report",
+        help="also write a self-describing versioned JSON benchmark report",
+    )
     run.add_argument("--defense", choices=("none", "envelope",
                                            "envelope-sign"),
                      default="none",

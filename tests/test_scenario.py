@@ -8,7 +8,7 @@ VALID = """
 schema: 1
 id: t-001
 name: test
-type: benign
+type: attack
 description: minimal valid scenario
 principal: user-123
 grant:
@@ -57,7 +57,7 @@ def test_bad_schema_version(tmp_path):
 
 
 def test_bad_type(tmp_path):
-    bad = VALID.replace("type: benign", "type: evil")
+    bad = VALID.replace("type: attack", "type: evil")
     with pytest.raises(ScenarioError, match="type"):
         load_scenario(write(tmp_path, bad))
 
@@ -262,11 +262,12 @@ def test_outcomes_must_be_mapping(tmp_path):
 
 def test_as_principal_loads(tmp_path):
     text = VALID.replace(
-        "rules: []",
-        "rules:\n      - match: 'AS:(?P<p>\\S+)'\n"
+        "    rules: []",
+        "    rules:\n      - match: 'AS:(?P<p>\\S+)'\n"
         "        then:\n"
-        "          delegate: {agent: reader, task: 'x', actions: [docs.read],\n"
-        "                     as_principal: '${p}', args: {}}")
+        "          delegate: {agent: helper, task: 'x', actions: [docs.read],\n"
+        "                     as_principal: '${p}', args: {}}\n"
+        "  helper:\n    capabilities: [docs.read]\n    rules: []")
     scn = load_scenario(write(tmp_path, text))
     assert scn.agents["reader"].rules[0].then["delegate"]["as_principal"] \
         == "${p}"
@@ -297,4 +298,65 @@ def test_as_principal_and_untracked_are_mutually_exclusive(tmp_path):
         "        then: {tool: {action: docs.read, untracked: true,\n"
         "               as_principal: 'user-a'}}")
     with pytest.raises(ScenarioError, match="mutually exclusive"):
+        load_scenario(write(tmp_path, bad))
+
+
+# -- benign scenarios must declare expect.outcomes (review FIX 5) ---------------
+
+
+def test_benign_without_expect_rejected(tmp_path):
+    bad = VALID.replace("type: attack", "type: benign")
+    with pytest.raises(ScenarioError, match="expect"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_benign_without_outcomes_rejected(tmp_path):
+    bad = VALID.replace("type: attack", "type: benign") + \
+        "\nexpect:\n  verdict: clean\n"
+    with pytest.raises(ScenarioError, match="expect.outcomes"):
+        load_scenario(write(tmp_path, bad))
+
+
+def test_benign_with_outcomes_loads(tmp_path):
+    text = VALID.replace("type: attack", "type: benign") + \
+        "\nexpect:\n  verdict: clean\n  outcomes:\n    docs_read: 1\n"
+    scn = load_scenario(write(tmp_path, text))
+    assert scn.expect.outcomes == {"docs_read": 1}
+
+
+# -- expect.allow_additional (review FIX 4) -------------------------------------
+
+
+def test_allow_additional_defaults_to_false(tmp_path):
+    text = VALID + "\nexpect:\n  verdict: violation\n"
+    scn = load_scenario(write(tmp_path, text))
+    assert scn.expect.allow_additional is False
+
+
+def test_allow_additional_loads(tmp_path):
+    text = VALID + ("\nexpect:\n  verdict: violation\n"
+                    "  violation_kinds: [V2]\n  allow_additional: true\n")
+    scn = load_scenario(write(tmp_path, text))
+    assert scn.expect.allow_additional is True
+
+
+def test_allow_additional_must_be_bool(tmp_path):
+    bad = VALID + "\nexpect:\n  verdict: violation\n  allow_additional: yes\n"
+    # YAML parses bare 'yes' as True (bool), so use a string instead.
+    bad = bad.replace("yes", "'maybe'")
+    with pytest.raises(ScenarioError, match="allow_additional"):
+        load_scenario(write(tmp_path, bad))
+
+
+# -- static self-delegation rejection (review FIX 6) ----------------------------
+
+
+def test_self_delegation_rejected(tmp_path):
+    bad = VALID.replace(
+        "rules: []",
+        "rules:\n      - match: 'go'\n"
+        "        then:\n"
+        "          delegate: {agent: reader, task: 'x', "
+        "actions: [docs.read], args: {}}")
+    with pytest.raises(ScenarioError, match="self-delegation"):
         load_scenario(write(tmp_path, bad))

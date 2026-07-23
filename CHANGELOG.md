@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-23
+
+Hardening release driven by a second external security review.
+
+### Security
+
+- **Principal fails closed** — an event with a missing/empty principal under a
+  principal-bearing root grant is now a violation (V5 origin loss), not clean.
+- **Reference defense enforces V7** — `EnvelopeGuard` binds the root principal
+  and blocks delegations/tool calls under a substituted principal, even when
+  every requested action is in-grant (new scenario attack-016 proves the
+  V7-only path; attack-011 previously relied on V1/V2 masking).
+- **Trace topology validation** — multiple root delegations, duplicate task
+  ids (re-binding to a different parent/agent; identical re-issue with a fresh
+  nonce remains legitimate renewal), and tool calls by an agent other than the
+  task's delegatee are judged V5 trace-integrity violations.
+- **Adapters propagate principal** — both the LangGraph and ROMA paths stamp
+  `Event.principal` on every event, so V7 works through real framework traces.
+- **Unpaired adapter tool results** are surfaced as synthetic uncorrelated
+  tool calls (V5-judgeable) instead of being silently dropped.
+
+### Added
+
+- **CI report formats** — `--format junit` / `--format sarif`, `--output`,
+  and `--benchmark-report` (versioned JSON bundle) for pipeline integration.
+- **Composite GitHub Action** (`action.yml`) — run DelegationBench in your own
+  CI with JUnit/SARIF artifacts; see `docs/ci-integration.md`.
+- **Exact expectation matching** — `expect.violation_kinds` and
+  `unauthorized_actions` must match the oracle exactly; `expect.allow_additional`
+  opts back into subset semantics. Corpus migrated (attack-008's expect made
+  exact — it was hiding an unauthorized `payment.prepare`).
+- **Benign scenarios require `expect.outcomes`** — a benign run without
+  declared outcomes counts as *incomplete*, never as success.
+- **Attempts vs executed** — metrics now distinguish unauthorized action
+  *attempts* from *executed* side effects (`unauthorized_calls` kept as alias).
+- **Fuzzer robustness** — static dangling-resource validation rejects broken
+  mutants pre-run; no campaign abort path remains (15-seed campaign: zero
+  aborts, zero errors, zero defense bypasses).
+- **LangGraph integration migrated** to `langchain.agents.create_agent`
+  (`create_react_agent` deprecated); integration tests run warning-free and
+  the `integration` job is a required branch-protection check.
+
+### Fixed
+
+- Cyclic delegation chains raise a clean `EngineError` (CLI exit 2) instead of
+  `RecursionError`; direct self-delegation is rejected at scenario load.
+
 ## [0.2.0] - 2026-07-23
 
 Hardening release driven by an external security review of 0.1.0.
@@ -93,5 +140,6 @@ Initial public release.
 - **CI** — GitHub Actions: pytest plus full corpus runs with and without the
   reference defense, on Python 3.10/3.12/3.13.
 
+[0.3.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.3.0
 [0.2.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.2.0
 [0.1.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.1.0

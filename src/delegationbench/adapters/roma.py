@@ -30,7 +30,7 @@ configured callbacks when invoking its modules::
     import dspy
     from delegationbench.adapters.roma import ROMATraceCallback, build_trace, run_oracle
 
-    cb = ROMATraceCallback()
+    cb = ROMATraceCallback(principal="user-123")  # run-level default identity
     dspy.settings.configure(callbacks=[*(dspy.settings.callbacks or []), cb])
 
     # Side-channel authority map: ROMA does NOT propagate metadata to
@@ -67,7 +67,13 @@ Known ROMA trace gaps (from the audit, docs/research/roma-integration.md)
   events at all; the side channel is the only delegation source there.
 - DSPy does not guarantee ``on_tool_end`` pairing under exceptions
   (ROMA's own callback keeps a stale-call sweeper); unpaired ends are
-  recorded against ``"uncorrelated"`` rather than dropped silently.
+  surfaced as a synthetic ``tool_call`` + ``tool_result`` against
+  ``"uncorrelated"`` (V5-detectable) rather than dropped silently —
+  a bare unmatched result is invisible to the oracle.
+- ROMA carries no user identity; the harness injects the principal via
+  the callback's run-level default or per task in ``register_task``, and
+  every captured event is stamped with it so ``build_trace`` populates
+  the trace's first-class ``Event.principal`` (V7).
 """
 
 from __future__ import annotations
@@ -143,29 +149,49 @@ def build_trace(events: list[AdapterEvent], grant: dict) -> Trace:
     trace = Trace()
     has_root = any(e.kind == "delegation" and e.parent_task is None
                    for e in events)
+    principal_of_task: dict[str, str] = {}
     if not has_root:
-        trace.delegation(None, grant.get("task_id", "root"),
+        root_id = grant.get("task_id", "root")
+        principal_of_task[root_id] = grant.get("principal", "")
+        trace.delegation(None, root_id,
                          grant.get("agent", "root"),
                          sorted(grant["allowed_actions"]), depth=0,
                          nonce=grant.get("nonce", "n-root"),
                          expires_at=None, source="user",
+                         principal=grant.get("principal", ""),
                          task=grant.get("task", ""))
     depths = _depths(events)
     for e in _order_events(events):
         if e.time is not None:
             trace.clock.now = e.time
         if e.kind == "delegation":
+            # Principal continuity: a delegation carries its own
+            # principal when the adapter observed one, else inherits the
+            # parent task's (the root falls back to the grant's).
+            if e.parent_task is None:
+                principal = e.principal or grant.get("principal", "")
+            else:
+                principal = (e.principal
+                             or principal_of_task.get(e.parent_task, ""))
+            principal_of_task[e.task_id] = principal
             trace.delegation(e.parent_task, e.task_id, e.agent,
                              sorted(e.scope), depth=depths[e.task_id],
                              nonce=e.nonce, expires_at=e.expires_at,
-                             source=e.source, task=e.task, args=e.args)
+                             source=e.source, principal=principal,
+                             task=e.task, args=e.args)
         elif e.kind == "tool_call":
             trace.tool_call(e.task_id, e.agent, e.action, e.args,
                             source=e.source, nonce=e.nonce,
-                            expires_at=e.expires_at)
+                            expires_at=e.expires_at,
+                            principal=(e.principal
+                                       or principal_of_task.get(
+                                           e.task_id, "")))
         elif e.kind == "tool_result":
             trace.tool_result(e.task_id, e.agent, e.action, e.result,
-                              source=e.source)
+                              source=e.source,
+                              principal=(e.principal
+                                         or principal_of_task.get(
+                                             e.task_id, "")))
         else:
             raise ValueError(f"unknown adapter event kind: {e.kind!r}")
     return trace
@@ -212,8 +238,13 @@ class ROMATraceCallback:
     passes no parent run identifier that would let the adapter do better.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, principal: str = "") -> None:
         self.events: list[AdapterEvent] = []
+        # Run-level default principal: ROMA carries no user identity, so
+        # the harness sets the originating-user id here (or per task via
+        # register_task); every captured event is stamped with it so the
+        # oracle can judge V7 principal continuity.
+        self.principal = principal
         # Side-channel authority map, keyed by task_id. ROMA does not
         # propagate metadata to subtasks, so the harness populates this as
         # tasks are created.
@@ -233,22 +264,32 @@ class ROMATraceCallback:
                       agent: str, scope, *, source: str = "user",
                       depth: int | None = None, nonce: str = "",
                       expires_at: float | None = None,
-                      task: str = "") -> None:
+                      task: str = "",
+                      principal: str | None = None) -> None:
         """Register a ROMA task at birth (see module docstring).
 
         Emits a ``delegation`` adapter event; the oracle re-derives
         effective authority from it, so the registered scope is the
-        *requested* scope, not proof of authority.
+        *requested* scope, not proof of authority. ``principal`` is the
+        originating-user id the task runs under; it defaults to the
+        callback's run-level principal, and child tasks inherit their
+        parent's principal in ``build_trace`` when neither is set.
         """
+        inherited_principal = (
+            self.authority.get(parent_task_id, {}).get("principal", "")
+            if parent_task_id is not None else self.principal)
+        principal = (principal if principal is not None
+                     else inherited_principal)
         self.authority[task_id] = {
             "parent_task_id": parent_task_id, "agent": agent,
             "scope": frozenset(scope), "depth": depth, "nonce": nonce,
-            "expires_at": expires_at,
+            "expires_at": expires_at, "principal": principal,
         }
         self.events.append(AdapterEvent(
             "delegation", task_id, parent_task=parent_task_id, agent=agent,
             scope=tuple(sorted(scope)), source=source, depth=depth,
-            nonce=nonce, expires_at=expires_at, task=task))
+            nonce=nonce, expires_at=expires_at, task=task,
+            principal=principal))
 
     # -- DSPy callback hooks --------------------------------------------
 
@@ -298,7 +339,8 @@ class ROMATraceCallback:
             action=name,
             args=dict(inputs) if isinstance(inputs, dict) else {},
             nonce=meta.get("nonce", ""),
-            expires_at=meta.get("expires_at"))
+            expires_at=meta.get("expires_at"),
+            principal=meta.get("principal", self.principal))
         self._pending_tools[call_id] = event
         self.events.append(event)
 
@@ -306,13 +348,21 @@ class ROMATraceCallback:
         start = self._pending_tools.pop(call_id, None)
         if start is None:
             # Unpaired end (DSPy does not guarantee pairing under
-            # exceptions): keep it visible as origin loss rather than
-            # dropping it.
-            start = AdapterEvent("tool_call", UNCORRELATED, action="unknown")
+            # exceptions): surface it as a trace-visible anomaly instead
+            # of dropping it — a synthetic tool_call on the uncorrelated
+            # task (action unknowable from a bare result; source marked)
+            # so the oracle judges it as V5 origin loss. A bare
+            # tool_result with no call is invisible to the oracle and
+            # the run would read as clean.
+            start = AdapterEvent("tool_call", UNCORRELATED,
+                                 action="unknown", source="tool_result",
+                                 principal=self.principal)
+            self.events.append(start)
         result = f"error: {exception}" if exception is not None else str(outputs)
         self.events.append(AdapterEvent(
             "tool_result", start.task_id, agent=start.agent,
-            source=start.source, action=start.action, result=result))
+            source=start.source, action=start.action, result=result,
+            principal=start.principal))
 
     # -- convenience -----------------------------------------------------
 

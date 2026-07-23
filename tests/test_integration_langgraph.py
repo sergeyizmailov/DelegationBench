@@ -12,9 +12,15 @@ the oracle:
 - benign in-grant chain (docs.read + payment.execute granted) -> clean
 - out-of-grant payment.execute under a read-only grant -> V2
 
-The whole module is skipped when the optional ``langgraph`` extra is not
-installed (``pip install 'delegationbench[langgraph]'``), so the suite
-stays green without the framework.
+The agent subgraphs are built with ``langchain.agents.create_agent``
+(LangChain 1.x) — ``langgraph.prebuilt.create_react_agent`` is
+deprecated and will be removed in LangGraph v2. ``langchain`` is
+therefore a TEST-ONLY dependency here: the ``langgraph`` optional extra
+stays langgraph-only, the adapter itself imports nothing from
+``langchain``, and the integration CI job installs ``langchain``
+explicitly. The whole module is skipped when the optional ``langgraph``
+extra is not installed (``pip install 'delegationbench[langgraph]'``),
+so the suite stays green without the framework.
 """
 
 import asyncio
@@ -24,12 +30,12 @@ import pytest
 
 pytest.importorskip("langgraph")
 
+from langchain.agents import create_agent  # noqa: E402
 from langchain_core.language_models.fake_chat_models import (  # noqa: E402
     GenericFakeChatModel)
 from langchain_core.messages import AIMessage, ToolMessage  # noqa: E402
 from langchain_core.tools import InjectedToolCallId, tool  # noqa: E402
 from langgraph.graph import END, START, MessagesState, StateGraph  # noqa: E402
-from langgraph.prebuilt import create_react_agent  # noqa: E402
 from langgraph.types import Command  # noqa: E402
 from typing_extensions import Annotated  # noqa: E402
 
@@ -94,7 +100,7 @@ def build_graph():
 
     The fake model plays a fixed script across both agents: read the
     invoice, hand off to payment, execute the payment, report. Agents
-    are ``create_react_agent`` subgraphs added as parent-graph nodes, so
+    are ``create_agent`` subgraphs added as parent-graph nodes, so
     tool runs nest under their agent's run in the run tree.
     """
     model = ScriptedChatModel(messages=itertools.cycle([
@@ -106,9 +112,9 @@ def build_graph():
         AIMessage(content="Invoice researched and paid."),
     ]))
 
-    reader = create_react_agent(
+    reader = create_agent(
         model, tools=[read_doc, transfer_to_payment], name="reader")
-    payment = create_react_agent(
+    payment = create_agent(
         model, tools=[execute_payment], name="payment")
 
     graph = StateGraph(MessagesState)
@@ -158,9 +164,16 @@ def test_real_graph_shape_is_observed():
     assert len(delegations) == 2
     assert delegations[0].parent_task is None
     assert delegations[0].agent == "reader"
-    assert delegations[0].detail["args"]["principal"] == PRINCIPAL
+    assert delegations[0].principal == PRINCIPAL
     assert delegations[1].agent == "payment"
     assert delegations[1].parent_task == delegations[0].task_id
+
+    # Event.principal (the V7 surface) is populated on EVERY event of
+    # the real graph run — delegations and tool events alike, children
+    # inheriting their task's principal.
+    assert trace.events
+    for e in trace.events:
+        assert e.principal == PRINCIPAL, (e.kind, e.task_id)
 
 
 def test_benign_in_grant_chain_is_clean():

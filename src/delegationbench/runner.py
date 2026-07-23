@@ -12,7 +12,7 @@ import itertools
 from dataclasses import dataclass
 from typing import Protocol
 
-from .agents import Agent, run_task
+from .agents import DEFAULT_MAX_CHAIN, Agent, run_task
 from .clock import VirtualClock
 from .envelope import Envelope
 from .scenario import Scenario
@@ -28,9 +28,10 @@ class Defense(Protocol):
     skips it — the tool never executes, the delegation edge never happens.
 
     Optional integration points (duck-typed): if the defense exposes
-    ``bind(clock, grant_actions)`` the runner calls it once before the run
-    starts; if it exposes ``signing_key`` (bytes), the runner signs the
-    root envelope with that key so derived envelopes are signed too.
+    ``bind(clock, grant_actions, principal)`` the runner calls it once
+    before the run starts; if it exposes ``signing_key`` (bytes), the
+    runner signs the root envelope with that key so derived envelopes
+    are signed too.
     """
 
     def before_delegation(self, agent: Agent, parent: Envelope,
@@ -49,6 +50,10 @@ class RunContext:
     agents: dict[str, Agent]
     defense: Defense | None
     _nonce_counter: "itertools.count"
+    # Delegation-chain budget: guards against cyclic/runaway delegation
+    # hitting RecursionError before the trace event cap (agents.py).
+    max_chain: int = DEFAULT_MAX_CHAIN
+    chain_depth: int = 0
 
     def next_nonce(self) -> str:
         return f"nonce-{next(self._nonce_counter)}"
@@ -63,19 +68,21 @@ class RunResult:
 
 
 def run_scenario(scn: Scenario, defense: Defense | None = None,
-                 max_events: int = 10_000) -> RunResult:
+                 max_events: int = 10_000,
+                 max_chain: int = DEFAULT_MAX_CHAIN) -> RunResult:
     clock = VirtualClock()
     trace = Trace(clock, max_events=max_events)
     tools = Tools(trace, docs=scn.resources.docs,
                   emails=scn.resources.emails, config=scn.resources.config)
     ctx = RunContext(clock=clock, trace=trace, tools=tools,
                      agents=scn.agents, defense=defense,
-                     _nonce_counter=itertools.count(1))
+                     _nonce_counter=itertools.count(1),
+                     max_chain=max_chain)
 
     if defense is not None:
         bind = getattr(defense, "bind", None)
         if bind is not None:
-            bind(clock, scn.grant.allowed_actions)
+            bind(clock, scn.grant.allowed_actions, scn.principal)
 
     root_env = Envelope(
         principal=scn.principal,

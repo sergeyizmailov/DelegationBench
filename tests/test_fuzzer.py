@@ -388,20 +388,84 @@ def test_envelope_clean_dead_mutant_counts_dead_not_neutral():
     assert classify(seed, data, verdict, "envelope", trace) == "dead"
 
 
-def test_campaign_counts_dead_and_errors(tmp_path):
-    # attack-009 with this seed exercises both: dead mutants (broken
-    # execution paths) and engine-erroring mutants (source_swap moves a
-    # resource a content-driven read still points at).
+def test_campaign_counts_dead_and_static_invalid(tmp_path):
+    # attack-009 with this seed exercises dead mutants (broken execution
+    # paths) and statically-broken mutants (e.g. source_swap moves a
+    # resource a content-driven read still points at): the latter are
+    # rejected as invalid PRE-RUN by _dangling_resource_refs instead of
+    # crashing the engine mid-run.
     report = run_campaign(DIVERGENT_ATTACK, budget=60, seed=1,
                           defense="none", out=tmp_path / "out",
                           minimize=False)
     assert report["counts"]["dead"] >= 1
-    assert report["errors"] >= 1
+    assert report["invalid"] >= 1
+    assert report["errors"] == 0   # static rejection caught them pre-run
     counts = report["counts"]
     assert counts["bypass"] + counts["divergent"] + counts["neutral"] \
         + counts["dead"] == report["valid"]
     assert report["valid"] + report["invalid"] + report["duplicates"] \
         + report["errors"] == report["mutants_run"]
+
+
+def test_engine_exception_never_aborts_campaign(tmp_path, monkeypatch):
+    # The runtime safety net: ANY engine exception during a mutant run
+    # is caught and counted as errors — the campaign completes.
+    real = fuzzer.judge_with_trace
+    calls = {"n": 0}
+
+    def flaky(scn, defense_name):
+        calls["n"] += 1
+        if calls["n"] % 3 == 0:
+            raise RuntimeError("simulated engine crash")
+        return real(scn, defense_name)
+
+    monkeypatch.setattr(fuzzer, "judge_with_trace", flaky)
+    report = run_campaign(ATTACK, budget=20, seed=3, defense="envelope",
+                          out=tmp_path / "out", minimize=False)
+    assert report["mutants_run"] == 20
+    assert report["errors"] >= 1
+    assert report["valid"] + report["invalid"] + report["duplicates"] \
+        + report["errors"] == report["mutants_run"]
+
+
+# -- static resource-reference validation ------------------------------------
+
+
+def test_dangling_refs_clean_on_all_shipped_scenarios():
+    # The static check must never reject a shipped scenario (no false
+    # positives: write-created ids, per-agent content flow, child
+    # results are all modelled).
+    for path in sorted((ROOT / "scenarios").rglob("*.yaml")):
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert fuzzer._dangling_resource_refs(data) == [], path.name
+
+
+def test_dangling_refs_detects_source_swap_breakage():
+    # Moving msg-101 from emails to docs leaves the NEW_MAIL-driven
+    # email.read pointing at a missing id: statically rejected.
+    data = copy.deepcopy(ATTACK_011)
+    fuzzer.source_swap(data, random.Random(1))
+    refs = fuzzer._dangling_resource_refs(data)
+    assert refs and "msg-101" in refs[0]
+
+
+def test_dangling_refs_detects_uppercased_capture():
+    # payload_wording's uppercase variant rewrites the NEW_MAIL line;
+    # the capture then renders MSG-101, which does not exist.
+    data = copy.deepcopy(ATTACK_011)
+    fuzzer._set_line(data, "docs", "inbox-brief", 1,
+                     fuzzer._get_line(data, "docs", "inbox-brief", 1).upper())
+    refs = fuzzer._dangling_resource_refs(data)
+    assert refs and "MSG-101" in refs[0]
+
+
+def test_dangling_refs_ignores_dead_and_write_created():
+    # A rule that never fires produces no reference; an id a docs.write
+    # creates counts as existing.
+    data = copy.deepcopy(SEED_DATA)
+    assert fuzzer._dangling_resource_refs(data) == []
+    data["agents"]["reader"]["rules"][0]["match"] = "NEVER_MATCHES"
+    assert fuzzer._dangling_resource_refs(data) == []
 
 
 # -- all-seeds smoke -----------------------------------------------------------

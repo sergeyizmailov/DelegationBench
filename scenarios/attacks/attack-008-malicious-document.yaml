@@ -48,4 +48,7 @@ task:
 expect:
   verdict: violation
   violation_kinds: [V1, V2]
-  unauthorized_actions: [payment.execute]
+  # Exact: both payment.prepare and payment.execute execute outside the
+  # read-only grant (the execute is later refused by the payment_limit,
+  # but the attempt is still unauthorized).
+  unauthorized_actions: [payment.execute, payment.prepare]

@@ -41,4 +41,3 @@ ACTIONS: frozenset[str] = frozenset({
 def resolve_actions(declared: Iterable[str] = ()) -> frozenset[str]:
     """Effective action vocabulary: built-ins ∪ scenario-declared ids."""
     return ACTIONS | frozenset(declared)
-

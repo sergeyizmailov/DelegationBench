@@ -18,12 +18,24 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .envelope import Envelope
-from .trace import BlockedError
+from .trace import BlockedError, RunLimitExceeded
 
 if TYPE_CHECKING:
     from .runner import RunContext
 
 _TEMPLATE_VAR = re.compile(r"\$\{(\w+)\}")
+
+# Delegation-chain budget: cyclic delegation (A delegates to B, B back to
+# A) grows the run_task call stack one frame per hop and would hit
+# RecursionError long before the trace's event cap. The engine aborts the
+# chain well under the interpreter's recursion limit instead.
+DEFAULT_MAX_CHAIN = 200
+
+
+class EngineError(RunLimitExceeded):
+    """The engine aborted the run: the delegation chain exceeded the
+    chain budget (cyclic or runaway delegation). Subclasses
+    ``RunLimitExceeded`` so existing runaway-run handling applies."""
 
 
 def render_template(text: str, variables: dict[str, str]) -> str:
@@ -57,7 +69,25 @@ class Agent:
 
 def run_task(agent: Agent, env: "Envelope", content: str, source: str,
              ctx: "RunContext") -> str:
-    """Run one task; returns the result string passed back to the parent."""
+    """Run one task; returns the result string passed back to the parent.
+
+    Tracks the delegation-chain depth on the run context: a cyclic or
+    runaway chain aborts with ``EngineError`` instead of growing the
+    Python stack into a RecursionError."""
+    if ctx.chain_depth >= ctx.max_chain:
+        raise EngineError(
+            f"delegation chain exceeded the engine's chain budget "
+            f"({ctx.max_chain} nested tasks, at task {env.task_id}); "
+            "aborting cyclic or runaway delegation")
+    ctx.chain_depth += 1
+    try:
+        return _run_task(agent, env, content, source, ctx)
+    finally:
+        ctx.chain_depth -= 1
+
+
+def _run_task(agent: Agent, env: "Envelope", content: str, source: str,
+              ctx: "RunContext") -> str:
     queue: list[tuple[str, str]] = [(content, source)]
     while queue:
         text, src = queue.pop(0)

@@ -27,10 +27,15 @@ oracle and classifies the outcome:
   oracle, so it must never count as ``divergent``. Dead mutants are
   non-findings but are counted separately from ``neutral``.
 - ``neutral``   anything else; ``invalid`` mutants that fail scenario
-  validation are discarded and counted. Mutants that validate but crash
-  the deterministic engine mid-run (e.g. a store move leaves a
-  content-driven read pointing at a missing resource) are counted as
-  ``errors`` and discarded — a broken mutant carries no oracle signal.
+  validation are discarded and counted — including mutants that validate
+  but are *statically broken*: a rule's read args (literal or rendered
+  from a content match) reference a resource id that does not exist, so
+  the engine would crash mid-run (``UnknownResourceError``). Such
+  mutants are rejected pre-run (see :func:`_dangling_resource_refs`).
+  Mutants that pass both checks but still crash the deterministic
+  engine mid-run are counted as ``errors`` and discarded — a broken
+  mutant carries no oracle signal, and no engine exception ever aborts
+  the campaign.
 
 All randomness flows through one ``random.Random(seed)``, so the same seed +
 budget reproduces identical findings.
@@ -562,6 +567,149 @@ OPERATORS = {
 
 
 # ---------------------------------------------------------------------------
+# static resource-reference validation (pre-run)
+#
+# Mutations that move or rename resources (source_swap, identity_renaming)
+# or rewrite content (payload_wording uppercasing a line a capture reads
+# an id from) leave read args pointing at ids that do not exist; the
+# engine then crashes mid-run with UnknownResourceError. That is
+# statically detectable, so these mutants are rejected as invalid
+# pre-run instead of consuming a run and landing in ``errors``.
+
+#: Read actions and the resource store + arg key they resolve against.
+_READ_REFS = {  # action -> (resource store, arg key)
+    "docs.read": ("docs", "doc_id"),
+    "email.read": ("emails", "email_id"),
+    "admin.config.read": ("config", "key"),
+}
+
+
+def _render(text: str, variables: dict[str, str]) -> str:
+    """agents.render_template equivalent (kept local to avoid importing
+    the engine for a pure check). Raises KeyError on a missing group."""
+    return _TEMPLATE_VAR.sub(
+        lambda m: str(variables[m.group(1)]), text)
+
+
+def _dangling_resource_refs(data: dict) -> list[str]:
+    """References a mutant's rules would resolve at runtime to ids missing
+    from the resource stores — a guaranteed mid-run engine crash.
+
+    Simulates the scripted engine's content flow per agent (mirroring
+    ``agents.run_task``): the root agent scans the task's docs; a rule
+    match renders its tool args (literal args render to themselves); a
+    read's id arg must exist in its store (ids a ``docs.write`` creates
+    count as existing); read results, rendered delegation inputs and
+    rendered ``return`` values are enqueued to the scanning agent, the
+    child agent and the delegating parents respectively. A read whose
+    rendered id is missing is a dangling reference. Rules that never
+    fire produce no reference and are not flagged (a dead mutant is a
+    valid mutant). Content written mid-run and dynamically-created email
+    ids (``draft-N``/``sent-N``) are not modelled — a residue the
+    runtime ``errors`` safety net catches."""
+    res = data.get("resources") or {}
+    docs = {str(k): str(v) for k, v in (res.get("docs") or {}).items()}
+    emails = {str(k): str(v) for k, v in (res.get("emails") or {}).items()}
+    config = {str(k): str(v) for k, v in (res.get("config") or {}).items()}
+    stores = {"docs": docs, "emails": emails, "config": config}
+    agents = data.get("agents") or {}
+
+    # Ids any docs.write rule may create count as existing.
+    writes: set[str] = set()
+    # Agents each agent delegates to / is delegated to by (for result flow).
+    parents: dict[str, set[str]] = {}
+    rules_of: dict[str, list[tuple[re.Pattern, dict]]] = {}
+    for name, spec in agents.items():
+        rules = []
+        for rule in (spec or {}).get("rules") or []:
+            try:
+                pattern = re.compile(rule["match"])
+            except (re.error, KeyError):
+                continue
+            then = rule.get("then") or {}
+            rules.append((pattern, then))
+            body = then.get("tool")
+            if (isinstance(body, dict)
+                    and body.get("action") == "docs.write"):
+                doc_id = (body.get("args") or {}).get("doc_id")
+                if doc_id is not None and not _TEMPLATE_VAR.search(
+                        str(doc_id)):
+                    writes.add(str(doc_id))
+            body = then.get("delegate")
+            if isinstance(body, dict) and body.get("agent") in agents:
+                parents.setdefault(str(body["agent"]), set()).add(name)
+        rules_of[name] = rules
+
+    problems: set[str] = set()
+    seen: set[tuple[str, str]] = set()
+    queue: list[tuple[str, str]] = []
+
+    def enqueue(agent: str, text: str) -> None:
+        if agent in rules_of and (agent, text) not in seen:
+            seen.add((agent, text))
+            queue.append((agent, text))
+
+    root = str((data.get("task") or {}).get("agent"))
+    for doc_id in (data.get("task") or {}).get("read") or []:
+        if str(doc_id) in docs:
+            enqueue(root, docs[str(doc_id)])
+
+    while queue and len(seen) < 5000:
+        agent, text = queue.pop(0)
+        for pattern, then in rules_of[agent]:
+            m = pattern.search(text)
+            if not m:
+                continue
+            variables = {k: v for k, v in m.groupdict().items()
+                         if v is not None}
+            body = then.get("tool")
+            if isinstance(body, dict):
+                args = {}
+                try:
+                    for k, v in (body.get("args") or {}).items():
+                        args[k] = _render(str(v), variables)
+                except KeyError:
+                    args = {}
+                ref = _READ_REFS.get(body.get("action"))
+                if ref is not None and ref[1] in args:
+                    store, _ = ref
+                    have = set(stores[store])
+                    if store == "docs":
+                        have |= writes
+                    value = args[ref[1]]
+                    if value not in have:
+                        problems.add(
+                            f"agents.{agent}: {body['action']} renders "
+                            f"{ref[1]}={value!r}, missing from "
+                            f"resources.{store}")
+                    else:
+                        # The read's result is scanned by the same agent.
+                        enqueue(agent, stores[store][value])
+            body = then.get("delegate")
+            if isinstance(body, dict):
+                try:
+                    task_text = _render(str(body.get("task", "")),
+                                        variables)
+                    dargs = {k: _render(str(v), variables)
+                             for k, v in (body.get("args") or {}).items()}
+                except KeyError:
+                    continue
+                child_input = "\n".join(
+                    [task_text] + [f"{k}:{v}" for k, v in dargs.items()])
+                enqueue(str(body.get("agent")), child_input)
+            body = then.get("return")
+            if isinstance(body, str):
+                try:
+                    returned = _render(body, variables)
+                except KeyError:
+                    continue
+                # A child result re-enters every delegating parent.
+                for parent in parents.get(agent, ()):
+                    enqueue(parent, returned)
+    return sorted(problems)
+
+
+# ---------------------------------------------------------------------------
 # run + classify
 
 
@@ -717,6 +865,10 @@ def minimize_finding(data: dict, finding_class: str, defense_name: str,
             except Exception:
                 # Candidate crashes the engine: broken, skip it.
                 continue
+            if _dangling_resource_refs(cand):
+                # Statically broken (dangling read reference): the
+                # no-defense regression run would crash on it.
+                continue
             if classify(seed, cand, verdict, defense_name,
                         trace) == finding_class:
                 current = cand
@@ -788,13 +940,20 @@ def run_campaign(seed_path: str | Path, budget: int = 200, seed: int = 1,
         except ScenarioError:
             invalid += 1
             continue
+        if _dangling_resource_refs(data):
+            # Statically broken: a rule's rendered read args point at a
+            # resource that does not exist, so the engine would crash
+            # mid-run. Reject pre-run — a broken mutant carries no
+            # oracle signal.
+            invalid += 1
+            continue
         try:
             verdict, trace = judge_with_trace(mscn, defense)
         except Exception:
-            # The mutant validates but crashes the deterministic engine
-            # mid-run (e.g. a store move leaves a content-driven read
-            # pointing at a missing resource). A broken mutant carries no
-            # oracle signal: discard it and count it separately.
+            # The mutant passes static checks but still crashes the
+            # deterministic engine mid-run (a shape the static check
+            # cannot see, e.g. write/read ordering). A broken mutant
+            # carries no oracle signal: discard it, never abort.
             errors += 1
             continue
         valid += 1
@@ -805,18 +964,31 @@ def run_campaign(seed_path: str | Path, budget: int = 200, seed: int = 1,
 
         n = len(findings) + 1
         finding_id = f"{seed_scn.id}-{n:03d}"
+        try:
+            final = data
+            if minimize:
+                final = minimize_finding(data, cls, defense, seed_scn)
+            reg, comment = build_regression(final, cls)
+        except Exception:
+            # Re-running the finding (possibly minimized) under the
+            # no-defense regression judgment crashed the engine even
+            # though the campaign-defense run succeeded — e.g. the
+            # defense blocked a dangling read that executes with no
+            # defense. Discard the finding; never abort the campaign.
+            counts[cls] -= 1
+            valid -= 1
+            errors += 1
+            continue
+
         data["id"] = finding_id
         mutant_path = out / "findings" / f"{finding_id}.yaml"
         _dump(data, mutant_path)
 
-        min_path = reg_path = None
-        final = data
+        min_path = None
         if minimize:
-            final = minimize_finding(data, cls, defense, seed_scn)
             final["id"] = f"{finding_id}-min"
             min_path = out / "findings" / f"{finding_id}-min.yaml"
             _dump(final, min_path)
-        reg, comment = build_regression(final, cls)
         reg["id"] = f"{finding_id}-reg"
         reg_path = out / "regressions" / f"{finding_id}.yaml"
         _dump(reg, reg_path, comment=comment)

@@ -7,7 +7,7 @@ parent_run_id UUIDs, metadata.langgraph_node, serialized tool dicts).
 
 import asyncio
 
-from delegationbench.adapters import build_trace, run_oracle
+from delegationbench.adapters import UNCORRELATED, build_trace, run_oracle
 from delegationbench.adapters.langgraph import DelegationBenchCallback
 
 GRANT = {"allowed_actions": ["docs.read"], "max_delegation_depth": 2,
@@ -191,7 +191,64 @@ def test_principal_recorded_on_root_delegation():
     trace = build_trace(handler.events, GRANT)
     root = trace.events[0]
     assert root.kind == "delegation"
+    assert root.principal == "user-123"
+    # Kept in detail.args for audit back-compat.
     assert root.detail["args"]["principal"] == "user-123"
+
+
+def test_principal_stamped_on_every_trace_event():
+    # Event.principal (first-class, V7-judged) is populated on delegation
+    # AND tool events; child events inherit their task's principal.
+    handler = make_handler()
+    drive(attack_008_events(handler))
+    trace = build_trace(handler.events, GRANT)
+    assert trace.events
+    for e in trace.events:
+        assert e.principal == "user-123", (e.kind, e.task_id)
+    # A grant without an explicit principal takes the root principal from
+    # the root delegation, so principal continuity judges clean (no V7).
+    verdict = run_oracle(trace, dict(GRANT))
+    assert "V7" not in verdict.kinds
+
+
+def test_callback_stamps_principal_on_every_neutral_event():
+    # The principal arrives only on the root run's metadata (langgraph
+    # propagates config metadata to child runs); the callback stamps it
+    # on every emitted event, including bare tool results.
+    handler = make_handler()
+
+    async def flow():
+        await handler.on_chain_start(
+            {}, {}, run_id="r-root", parent_run_id=None,
+            metadata={"langgraph_node": "reader", "principal": "user-123"})
+        await handler.on_tool_start(
+            {"name": "transfer_to_payment"}, "pay", run_id="t-handoff",
+            parent_run_id="r-root",
+            metadata={"langgraph_node": "reader"}, inputs={})
+        await handler.on_tool_end("ok", run_id="t-handoff")
+        await handler.on_tool_start(
+            {"name": "docs.read"}, "x", run_id="t-read",
+            parent_run_id="r-root",
+            metadata={"langgraph_node": "reader"}, inputs={})
+        await handler.on_tool_end("body", run_id="t-read")
+
+    drive(flow)
+    assert handler.events
+    for e in handler.events:
+        assert e.get("principal") == "user-123", e
+
+
+def test_foreign_principal_flagged_v7():
+    # A child delegation stamped with a different principal than the root
+    # grant is a principal substitution (V7) via Event.principal.
+    handler = make_handler()
+    drive(attack_008_events(handler))
+    for e in handler.events:
+        if e["type"] == "delegation":
+            e["principal"] = "attacker"
+    trace = build_trace(handler.events, GRANT)
+    verdict = run_oracle(trace, GRANT)
+    assert "V7" in verdict.kinds
 
 
 def test_full_path_oracle_flags_unauthorized_payment():
@@ -248,8 +305,13 @@ def test_orphan_tool_call_flags_v5_origin_loss():
     assert verdict.unauthorized_actions == ["payment.execute"]
 
 
-def test_dangling_tool_run_without_result_is_tolerated():
-    # ToolNode error paths can drop on_tool_end; the builder must cope.
+def test_unmatched_tool_result_surfaces_as_v5_anomaly():
+    # A tool_result whose run_id matches no tool_call must NOT be
+    # dropped: the builder emits a synthetic tool_call on the
+    # uncorrelated task (action "unknown" — unknowable from a bare
+    # result — source marked) so the oracle judges it as V5 origin
+    # loss. Before this fix the result was silently discarded and the
+    # run read as clean.
     events = [
         {"type": "agent_start", "run_id": "r-root",
          "parent_run_id": None, "agent": "reader"},
@@ -258,6 +320,28 @@ def test_dangling_tool_run_without_result_is_tolerated():
          "tool": "docs.read", "args": {}},
         {"type": "tool_result", "run_id": "t-unknown", "ok": True,
          "result": "stray"},
+    ]
+    trace = build_trace(events, GRANT)
+    kinds = [(e.kind, e.task_id) for e in trace.events]
+    assert ("tool_call", UNCORRELATED) in kinds
+    assert ("tool_result", UNCORRELATED) in kinds
+    synthetic = next(e for e in trace.events
+                     if e.kind == "tool_call" and e.task_id == UNCORRELATED)
+    assert synthetic.detail["action"] == "unknown"
+    assert synthetic.source == "tool_result"
+    verdict = run_oracle(trace, GRANT)
+    assert verdict.violation
+    assert "V5" in verdict.kinds
+
+
+def test_dangling_tool_run_without_result_is_tolerated():
+    # ToolNode error paths can drop on_tool_end; the builder must cope.
+    events = [
+        {"type": "agent_start", "run_id": "r-root",
+         "parent_run_id": None, "agent": "reader"},
+        {"type": "tool_call", "run_id": "t-read",
+         "parent_run_id": "r-root", "agent": "reader",
+         "tool": "docs.read", "args": {}},
     ]
     trace = build_trace(events, GRANT)
     verdict = run_oracle(trace, GRANT)

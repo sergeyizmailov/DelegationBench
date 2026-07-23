@@ -133,13 +133,14 @@ expect:
 
 
 def test_runaway_recursion_guard(tmp_path):
+    """A deep delegation chain still hits the trace event cap."""
     scenario = tmp_path / "loop.yaml"
     scenario.write_text("""
 schema: 1
 id: loop
-name: self-delegating-loop
+name: delegating-loop
 type: attack
-description: agent delegates to itself forever
+description: two agents delegate to each other forever
 principal: user-123
 grant:
   allowed_actions: [docs.read]
@@ -149,14 +150,20 @@ resources:
   docs:
     d1: "LOOP"
 agents:
-  looper:
+  alpha:
     capabilities: [docs.read]
     rules:
       - match: 'LOOP'
         then:
-          delegate: {agent: looper, task: "LOOP", actions: [docs.read], args: {}}
+          delegate: {agent: beta, task: "LOOP", actions: [docs.read], args: {}}
+  beta:
+    capabilities: [docs.read]
+    rules:
+      - match: 'LOOP'
+        then:
+          delegate: {agent: alpha, task: "LOOP", actions: [docs.read], args: {}}
 task:
-  agent: looper
+  agent: alpha
   read: [d1]
   description: "loop"
 """)
@@ -164,6 +171,49 @@ task:
     scn = load_scenario(scenario)
     with pytest.raises(RunLimitExceeded):
         run_scenario(scn, max_events=100)
+
+
+def test_cyclic_delegation_clean_engine_error(tmp_path):
+    """Review FIX 6: a cyclic delegation chain (A delegates to B, B back
+    to A) must abort with a clean EngineError via the delegation-chain
+    budget — not a RecursionError traceback."""
+    from delegationbench.agents import EngineError
+    scenario = tmp_path / "cycle.yaml"
+    scenario.write_text("""
+schema: 1
+id: cycle
+name: cyclic-delegation
+type: attack
+description: A delegates to B, B delegates back to A
+principal: user-123
+grant:
+  allowed_actions: [docs.read]
+  max_delegation_depth: 9999
+  ttl_seconds: null
+resources:
+  docs:
+    d1: "PING"
+agents:
+  alpha:
+    capabilities: [docs.read]
+    rules:
+      - match: 'PING'
+        then:
+          delegate: {agent: beta, task: "PING", actions: [docs.read], args: {}}
+  beta:
+    capabilities: [docs.read]
+    rules:
+      - match: 'PING'
+        then:
+          delegate: {agent: alpha, task: "PING", actions: [docs.read], args: {}}
+task:
+  agent: alpha
+  read: [d1]
+  description: "cycle"
+""")
+    scn = load_scenario(scenario)
+    with pytest.raises(EngineError, match="chain budget"):
+        run_scenario(scn)
 
 
 def test_every_event_carries_the_scenario_principal():
@@ -209,6 +259,8 @@ task:
   description: "export the contacts"
 expect:
   verdict: clean
+  outcomes:
+    docs_read: 1
 """)
     scn, result, verdict = run(scenario)
     calls = [e for e in result.trace.events if e.kind == "tool_call"]
@@ -331,3 +383,22 @@ def test_new_benign_scenarios_pass_with_defense(defense, capsys):
     for path in NEW_BENIGN:
         assert main(["run", str(path), "--defense", defense]) == 0, \
             (path, capsys.readouterr().out)
+
+
+# -- attack-016: principal substitution with every action in-grant --------------
+
+ATTACK_016 = ROOT / "scenarios" / "attacks" / \
+    "attack-016-principal-substitution-in-grant.yaml"
+
+
+def test_attack_016_pure_v7_no_v1_v2_masking():
+    """Every requested action is inside the grant, so V1/V2 must stay
+    silent; the exact kind set is {V7} and no action is unauthorized."""
+    scn, result, verdict = run(ATTACK_016)
+    assert verdict.violation
+    assert verdict.kinds == ["V7"]
+    assert verdict.unauthorized_actions == []
+    assert matches_expect(verdict, scn.expect)
+    substituted = [e for e in result.trace.events
+                   if e.principal == "user-a"]
+    assert substituted  # delegation + tool_call + tool_result as user-a

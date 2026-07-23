@@ -48,7 +48,10 @@ Event mapping
   ``build_trace``.
 - Agent identity for a tool run = nearest ancestor run with a
   ``langgraph_node``; principal = ``config["metadata"]["principal"]``
-  (or ``user_id``) seen on any run's metadata.
+  (or ``user_id``) seen on any run's metadata, stamped on EVERY emitted
+  event (agent runs, delegations, tool calls and results) so
+  ``build_trace`` can populate the trace's first-class
+  ``Event.principal`` and the oracle can judge V7.
 
 Version context
 ---------------
@@ -127,6 +130,11 @@ class DelegationBenchCallback(_AsyncCallbackHandler):
         the oracle then judges the raw name, which surfaces unmapped
         tools as V2 instead of silently authorizing them. Handoff
         (delegation) tool names are never mapped.
+    handoffs:
+        Exact custom handoff definitions keyed by tool name. A value may
+        be a destination-agent string or a mapping with ``to_agent`` and
+        optional ``scope`` / ``task``. Exact definitions take precedence
+        over naming conventions and make custom handoffs auditable.
     """
 
     HANDOFF_PREFIXES = ("transfer_to_", "delegate_to_")
@@ -136,15 +144,19 @@ class DelegationBenchCallback(_AsyncCallbackHandler):
     def __init__(self, agents: Iterable[str] | None = None,
                  principal_keys: Iterable[str] | None = None,
                  handoff_prefixes: Iterable[str] | None = None,
-                 action_map: dict[str, str] | None = None) -> None:
+                 action_map: dict[str, str] | None = None,
+                 handoffs: dict[str, str | dict] | None = None) -> None:
         self.agents = set(agents) if agents is not None else None
         self.principal_keys = tuple(principal_keys or self.PRINCIPAL_KEYS)
         self.handoff_prefixes = tuple(handoff_prefixes
                                       or self.HANDOFF_PREFIXES)
         self.action_map = dict(action_map or {})
+        self.handoffs = dict(handoffs or {})
         self.events: list[NeutralEvent] = []
         self._agent_of_run: dict[str, str] = {}
         self._parent_of_run: dict[str, str | None] = {}
+        self._principal_of_run: dict[str, Any] = {}
+        self._run_principal: Any = None  # last principal seen anywhere
 
     # -- internal helpers ------------------------------------------------
 
@@ -168,6 +180,49 @@ class DelegationBenchCallback(_AsyncCallbackHandler):
                 return metadata[key]
         return None
 
+    def _event_principal(self, metadata: dict | None,
+                         run_id: Any = None) -> Any:
+        """Best principal for an event: the run's own metadata, else the
+        principal recorded for this run, else the run-level default
+        (``config["metadata"]`` propagates to every child run, so in
+        practice one principal covers the whole invocation)."""
+        principal = self._principal(metadata)
+        if principal is not None:
+            if run_id is not None:
+                self._principal_of_run[str(run_id)] = principal
+            self._run_principal = principal
+            return principal
+        if run_id is not None and str(run_id) in self._principal_of_run:
+            return self._principal_of_run[str(run_id)]
+        return self._run_principal
+
+    def record_handoff(self, *, run_id: Any, parent_run_id: Any,
+                       from_agent: str, to_agent: str, scope,
+                       principal: str, task: str = "",
+                       child_run_id: Any = None,
+                       source: str = "user",
+                       args: dict | None = None) -> None:
+        """Record an explicit custom/parallel delegation.
+
+        Use this for plain LangGraph edges, ``Send`` fan-out, or custom
+        routing that does not execute a recognizable handoff tool.
+        ``child_run_id`` gives deterministic correlation when multiple
+        siblings target the same agent concurrently.
+        """
+        rid = str(run_id)
+        parent = str(parent_run_id) if parent_run_id is not None else None
+        event: NeutralEvent = {
+            "type": "delegation", "run_id": rid,
+            "parent_run_id": parent, "from_agent": from_agent,
+            "to_agent": to_agent, "tool": "explicit_handoff",
+            "scope": list(scope), "principal": principal,
+            "task": task, "source": source, "args": dict(args or {}),
+            "ts": time.time(),
+        }
+        if child_run_id is not None:
+            event["child_run_id"] = str(child_run_id)
+        self.events.append(event)
+
     # -- callback hooks ---------------------------------------------------
 
     async def on_chain_start(self, serialized: dict | None,
@@ -188,7 +243,10 @@ class DelegationBenchCallback(_AsyncCallbackHandler):
             "parent_run_id": str(parent_run_id) if parent_run_id else None,
             "agent": node, "ts": time.time(),
         }
-        principal = self._principal(metadata)
+        explicit_task = metadata.get("delegation_task_id")
+        if explicit_task is not None:
+            event["task_id"] = str(explicit_task)
+        principal = self._event_principal(metadata, run_id)
         if principal is not None:
             event["principal"] = principal
         self.events.append(event)
@@ -211,7 +269,11 @@ class DelegationBenchCallback(_AsyncCallbackHandler):
         metadata = metadata or {}
         serialized = serialized or {}
         name = serialized.get("name") or "?"
-        dest = (serialized.get("metadata") or {}).get(
+        custom = self.handoffs.get(name)
+        custom_spec = custom if isinstance(custom, dict) else {}
+        custom_dest = (custom if isinstance(custom, str)
+                       else custom_spec.get("to_agent"))
+        dest = custom_dest or (serialized.get("metadata") or {}).get(
             self.HANDOFF_METADATA_KEY) or metadata.get(
             self.HANDOFF_METADATA_KEY)
         is_handoff = dest is not None or name.startswith(
@@ -228,37 +290,72 @@ class DelegationBenchCallback(_AsyncCallbackHandler):
         # about agent runs.
         parent = from_run or (str(parent_run_id) if parent_run_id
                               else None)
+        principal = self._event_principal(metadata, run_id)
         if is_handoff:
             if dest is None:
                 for prefix in self.handoff_prefixes:
                     if name.startswith(prefix):
                         dest = name[len(prefix):]
                         break
-            self.events.append({
+            event: NeutralEvent = {
                 "type": "delegation", "run_id": rid,
                 "parent_run_id": parent, "from_agent": from_agent,
                 "to_agent": dest, "tool": name,
                 "args": dict(inputs or {}), "ts": time.time(),
-            })
+            }
+            scope = custom_spec.get("scope")
+            if scope is None:
+                scope = (inputs or {}).get("scope")
+            if scope is None:
+                scope = metadata.get("delegation_scope")
+            if scope is not None:
+                event["scope"] = list(scope)
+            task = (custom_spec.get("task")
+                    or (inputs or {}).get("task")
+                    or metadata.get("delegation_task"))
+            if task is not None:
+                event["task"] = str(task)
+            child_run_id = ((inputs or {}).get("child_run_id")
+                            or metadata.get("delegation_child_run_id"))
+            if child_run_id is not None:
+                event["child_run_id"] = str(child_run_id)
+            event["source"] = metadata.get("delegation_source", "user")
+            if principal is not None:
+                event["principal"] = principal
+            self.events.append(event)
         else:
             # Map the framework tool name to the canonical grant action;
             # unmapped names pass through unchanged (see class docstring).
             action = self.action_map.get(name, name)
-            self.events.append({
+            event = {
                 "type": "tool_call", "run_id": rid, "parent_run_id": parent,
                 "agent": from_agent or metadata.get("langgraph_node"),
                 "tool": action, "args": dict(inputs or {}),
+                "source": metadata.get("delegation_source", "user"),
                 "ts": time.time(),
-            })
+            }
+            if principal is not None:
+                event["principal"] = principal
+            self.events.append(event)
 
     async def on_tool_end(self, output: Any, *, run_id: Any,
                           **kwargs: Any) -> None:
-        self.events.append({"type": "tool_result", "run_id": str(run_id),
-                            "ok": True, "result": str(output)[:500],
-                            "ts": time.time()})
+        event: NeutralEvent = {"type": "tool_result",
+                               "run_id": str(run_id),
+                               "ok": True, "result": str(output)[:500],
+                               "ts": time.time()}
+        principal = self._event_principal(None, run_id)
+        if principal is not None:
+            event["principal"] = principal
+        self.events.append(event)
 
     async def on_tool_error(self, error: BaseException, *, run_id: Any,
                             **kwargs: Any) -> None:
-        self.events.append({"type": "tool_result", "run_id": str(run_id),
-                            "ok": False, "error": str(error),
-                            "ts": time.time()})
+        event: NeutralEvent = {"type": "tool_result",
+                               "run_id": str(run_id),
+                               "ok": False, "error": str(error),
+                               "ts": time.time()}
+        principal = self._event_principal(None, run_id)
+        if principal is not None:
+            event["principal"] = principal
+        self.events.append(event)
