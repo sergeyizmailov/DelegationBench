@@ -1,10 +1,11 @@
 <p align="center">
-  <img src=".github/assets/delegationbench-hero.png" alt="DelegationBench — open crash tests for authority escalation across AI agent handoffs" width="100%">
+  <img src="https://raw.githubusercontent.com/sergeyizmailov/DelegationBench/main/.github/assets/delegationbench-hero.png" alt="DelegationBench — open crash tests for authority escalation across AI agent handoffs" width="100%">
 </p>
 
 <p align="center">
   <a href="https://github.com/sergeyizmailov/DelegationBench/actions/workflows/delegationbench.yml"><img src="https://github.com/sergeyizmailov/DelegationBench/actions/workflows/delegationbench.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://github.com/sergeyizmailov/DelegationBench/security/code-scanning"><img src="https://github.com/sergeyizmailov/DelegationBench/actions/workflows/github-code-scanning/codeql/badge.svg" alt="CodeQL"></a>
+  <a href="https://pypi.org/project/delegationbench/"><img src="https://img.shields.io/pypi/v/delegationbench" alt="PyPI"></a>
   <a href="https://github.com/sergeyizmailov/DelegationBench/releases/latest"><img src="https://img.shields.io/github/v/release/sergeyizmailov/DelegationBench" alt="Latest release"></a>
   <a href="https://github.com/sergeyizmailov/DelegationBench/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
 </p>
