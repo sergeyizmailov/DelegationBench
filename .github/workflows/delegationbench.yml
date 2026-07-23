@@ -71,3 +71,6 @@ jobs:
         run: |
           delegationbench --help
           python -m pip check
+          # The corpus ships inside the wheel: running it from the installed
+          # package (no repo checkout) must not regress.
+          delegationbench run scenarios/ --defense envelope

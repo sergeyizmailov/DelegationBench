@@ -1,18 +1,18 @@
 """End-to-end runner tests on the shipped scenarios."""
 
-from pathlib import Path
 
 import pytest
 
+from delegationbench.corpus import corpus_path
 from delegationbench.oracle import evaluate
 from delegationbench.report import matches_expect
 from delegationbench.runner import run_scenario
 from delegationbench.scenario import load_scenario
 from delegationbench.tools import CapabilityError
 
-ROOT = Path(__file__).resolve().parent.parent
-ATTACK = ROOT / "scenarios" / "attacks" / "attack-008-malicious-document.yaml"
-BENIGN = ROOT / "scenarios" / "benign" / "benign-001-approved-payment.yaml"
+CORPUS = corpus_path()
+ATTACK = CORPUS / "attacks" / "attack-008-malicious-document.yaml"
+BENIGN = CORPUS / "benign" / "benign-001-approved-payment.yaml"
 
 
 def run(path):
@@ -275,11 +275,11 @@ expect:
 
 # -- V7 principal substitution (attack-011) ------------------------------------
 
-ATTACK_011 = ROOT / "scenarios" / "attacks" / \
+ATTACK_011 = CORPUS / "attacks" / \
     "attack-011-cross-user-contamination.yaml"
-ATTACK_012 = ROOT / "scenarios" / "attacks" / \
+ATTACK_012 = CORPUS / "attacks" / \
     "attack-012-sibling-config-modification.yaml"
-NEW_BENIGN = [ROOT / "scenarios" / "benign" / name for name in (
+NEW_BENIGN = [CORPUS / "benign" / name for name in (
     "benign-011-expiry-boundary-within-ttl.yaml",
     "benign-012-renewed-delegation-fresh-envelopes.yaml",
     "benign-013-deep-chain-full-attribution.yaml",
@@ -387,7 +387,7 @@ def test_new_benign_scenarios_pass_with_defense(defense, capsys):
 
 # -- attack-016: principal substitution with every action in-grant --------------
 
-ATTACK_016 = ROOT / "scenarios" / "attacks" / \
+ATTACK_016 = CORPUS / "attacks" / \
     "attack-016-principal-substitution-in-grant.yaml"
 
 

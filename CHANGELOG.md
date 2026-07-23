@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Scenario corpus ships inside the package.** The 75 scenarios moved from
+  the repo-root `scenarios/` into `src/delegationbench/scenarios/` and are
+  included as package data, so the documented quickstart
+  `delegationbench run scenarios/` works from a PyPI wheel or sdist install,
+  not only from a repo checkout. CLI path resolution is unchanged for real
+  filesystem paths; a nonexistent `scenarios/...` argument (directory or
+  single file) falls back to the bundled corpus via `importlib.resources`
+  and prints a one-line note on stderr. `delegationbench fuzz` resolves
+  seed paths the same way. Tests locate the corpus through
+  `delegationbench.corpus.corpus_path()` instead of a hardcoded repo-root
+  path, so they also pass from an sdist.
+
 ## [0.4.3] - 2026-07-23
 
 ### Fixed

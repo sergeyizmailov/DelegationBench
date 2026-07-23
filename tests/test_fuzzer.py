@@ -12,16 +12,16 @@ import yaml
 
 from delegationbench import fuzzer
 from delegationbench.cli import main
+from delegationbench.corpus import corpus_path
 from delegationbench.fuzzer import (BYPASS_COMMENT, OPERATORS,
                                     MutationNotApplicable, build_regression,
                                     classify, judge, judge_with_trace,
                                     minimize_finding, run_campaign)
 from delegationbench.scenario import load_scenario, parse_scenario
 
-ROOT = Path(__file__).resolve().parent.parent
-ATTACK = ROOT / "scenarios" / "attacks" / "attack-008-malicious-document.yaml"
+ATTACK_DIR = corpus_path() / "attacks"
+ATTACK = ATTACK_DIR / "attack-008-malicious-document.yaml"
 SEED_DATA = yaml.safe_load(ATTACK.read_text(encoding="utf-8"))
-ATTACK_DIR = ROOT / "scenarios" / "attacks"
 # Under the fixed classifier (dead mutants are not divergent), this
 # seed/budget yields at least one genuine divergent finding.
 DIVERGENT_ATTACK = ATTACK_DIR / "attack-009-replayed-delegation.yaml"
@@ -435,7 +435,7 @@ def test_dangling_refs_clean_on_all_shipped_scenarios():
     # The static check must never reject a shipped scenario (no false
     # positives: write-created ids, per-agent content flow, child
     # results are all modelled).
-    for path in sorted((ROOT / "scenarios").rglob("*.yaml")):
+    for path in sorted(corpus_path().rglob("*.yaml")):
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         assert fuzzer._dangling_resource_refs(data) == [], path.name
 

@@ -26,8 +26,9 @@ All three must pass before you open a PR. CI runs the same checks.
 
 1. Read [THREAT_MODEL.md](THREAT_MODEL.md) — your scenario must test authority
    propagation across a delegation chain, not generic prompt injection.
-2. Copy the closest existing scenario under `scenarios/attacks/` or
-   `scenarios/benign/` and follow its structure.
+2. Copy the closest existing scenario under
+   `src/delegationbench/scenarios/attacks/` or
+   `src/delegationbench/scenarios/benign/` and follow its structure.
 3. Every attack needs a complete `expect` block that the oracle actually
    produces — run it, don't guess.
 4. Every attack needs a benign lookalike (existing or new) so defenses cannot
