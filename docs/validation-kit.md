@@ -1,10 +1,9 @@
 # External Validation Kit
 
-Pre-submission goal: show a working trace (not a pitch deck) to 3–5 potential
-users and record their answers. This is a human action — the materials below
-are ready to send. At least one respondent must confirm that they would test or
-use DelegationBench in a workflow or CI (or demonstrate the equivalent by
-running it).
+Goal: show a working trace to 3–5 potential users and record their answers.
+This is a human validation step. At least one respondent should confirm that
+they would test or use DelegationBench in a workflow or CI, or demonstrate the
+equivalent by running it.
 
 ## Whom to approach
 

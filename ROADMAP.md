@@ -1,85 +1,64 @@
 # Roadmap
 
-DelegationBench is an early open-source security project. This roadmap
-separates what is reproducible today from the evidence still required before a
-Sentient Foundation application.
+DelegationBench is an early open-source security project. The roadmap separates
+the reproducible baseline available today from the validation and integration
+work needed for a stable release.
 
-## Current baseline — v0.4.0 release candidate
+## Current baseline — v0.4.0
 
 - Deterministic runner, authorization oracle, delegation-envelope reference
   defense, and authority-aware fuzzer.
 - 75 scenarios: 38 attacks and 37 benign twins covering V1–V7.
 - Terminal, JSON, JUnit, SARIF, and versioned benchmark reports.
 - Composite GitHub Action and one-command CI integration.
-- LangGraph adapter with real compiled-graph integration tests, explicit
-  principal propagation, custom handoffs, task scope, and parallel-delegation
+- LangGraph adapter with compiled-graph integration tests, explicit principal
+  propagation, custom handoffs, task scope, and parallel-delegation
   correlation.
-- Experimental clean-room ROMA adapter; a real ROMA run remains blocked on
-  licensing clarification and maintainer validation.
-- Real open-weight LLM + LangGraph demo harness. Repeated multi-model results
-  have not yet been accepted as a public benchmark.
+- Experimental clean-room ROMA adapter.
+- Real open-weight LLM and LangGraph demo harness for repeated trials.
 
-## Pre-submission gates
+## Near term
 
-The project should not claim grant readiness until all of these gates close:
+### Reproducible model evidence
 
-1. **Real-model evidence** — run the public LangGraph demo against at least two
-   open-weight models, with repeated attack and benign trials, fixed
-   configurations, full traces, and published versioned reports.
-2. **External validation** — collect feedback from 3–5 relevant framework
-   developers or security engineers; at least one must confirm they would test
-   or use DelegationBench in a workflow or CI.
-3. **Corpus review** — record maintainer editorial review for the 22 new
-   attack/benign pairs; automated gates already enforce execution, containment,
-   benign completion, and V1–V7 coverage.
-4. **Application decisions** — approve the requested budget, duration, and
-   applicant details. No agent-generated funding figure is authoritative.
-5. **Submission assets** — publish a short demo, benchmark summary, external
-   validation record, milestone table, and final application narrative.
+- Publish reviewed results for at least two open-weight models.
+- Run repeated attack and benign trials with fixed configurations.
+- Record model revisions, serving versions, prompts, hardware, failures,
+  aggregate metrics, and full traces.
+- Follow the [benchmark protocol](docs/benchmark-protocol.md).
 
-The public supporting brief and 90-second demo recording script are already
-prepared; the final recording should use the tagged release and must not claim
-pending model or external-validation evidence.
+### External validation
 
-See [docs/grant-readiness.md](docs/grant-readiness.md) for the evidence matrix
-and exact acceptance criteria.
+- Collect reproducible feedback from framework developers and security
+  engineers.
+- Validate the one-command CI workflow in downstream repositories.
+- Turn integration obstacles into tracked issues and regression fixtures.
 
-## Proposed delivery sequence
+### Corpus and integration depth
 
-### Gate A — Evidence and validation
-
-- Publish results for two open-weight models with at least 10 attack and 10
-  benign trials per model/configuration.
-- Record model identifiers, serving versions, temperature, prompts, hardware,
-  run counts, failures, latency, and full DelegationBench traces.
-- Complete 3–5 external validation conversations using the
-  [validation kit](docs/validation-kit.md).
-
-### Gate B — Corpus and integration depth
-
-- Review and maintain the 75-scenario paired corpus; expand further where
-  external framework feedback identifies missing surfaces.
-- Publish a V1–V7 coverage matrix and review checklist.
+- Maintain paired attack and benign coverage across V1–V7.
+- Expand the corpus when framework feedback identifies missing security
+  boundaries.
 - Add LangGraph conformance fixtures for custom handoffs, explicit scopes, and
   parallel fan-out.
-- Run the ROMA adapter only after licensing and API assumptions are confirmed.
+- Run the ROMA adapter after licensing and API assumptions are confirmed.
 
-### Gate C — Grant packet
+## Stable release
 
-- Approve budget and duration.
-- Freeze benchmark reports against a tagged release.
-- Publish the demo and concise technical article.
-- Submit with links to the repository, release, reports, validation evidence,
-  threat model, competitive research, and measurable post-grant milestones.
+- Publish the package through PyPI Trusted Publishing.
+- Stabilize the scenario and trace schemas with migration guidance.
+- Publish signed or provenance-attested release artifacts.
+- Document supported framework versions and adapter compatibility.
+- Tag v1.0 after downstream reproduction and corpus review.
 
 ## Longer-term direction
 
-- Stable scenario and trace schemas with migration guidance.
 - Additional framework adapters selected by demonstrated user demand.
 - Asymmetric signed delegation envelopes as a production-oriented reference
   design.
 - Community scenario review and cross-framework regression sharing.
-- PyPI trusted publishing and signed/provenanced release artifacts.
+- Broader authority surfaces, including browser sessions, wallets, cloud APIs,
+  and MCP tools.
 
 ## Contributing
 

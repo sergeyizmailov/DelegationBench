@@ -1,4 +1,4 @@
-"""Delegation-aware fuzzer (PROJECT_PLAN.md §9).
+"""Delegation-aware fuzzer.
 
 Mutates the *authority-relevant* structure of a seed scenario — payload
 wording, claimed sender role, delegation topology, grant shape, expiry and

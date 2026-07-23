@@ -18,8 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a real open-weight LLM + LangGraph benchmark harness with repeated
   attack/benign trials, per-run traces, explicit failure accounting, redacted
   endpoint metadata, and reproducibility fields.
-- Added Sentient grant-readiness and application-draft documents plus a
-  protocol for reviewed real-model reports.
+- Added a reproducibility protocol for reviewed real-model reports.
 
 ### Changed
 
@@ -30,10 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made the composite GitHub Action attempt both JUnit and SARIF generation
   before enforcing a failed benchmark result, preserving diagnostics on
   regressions.
-- Updated citation/package metadata and added an explicit Sentient grant
-  readiness matrix, reproducible benchmark protocol, and current roadmap.
-- Removed unapproved grant figures from the project plan; amount and duration
-  remain applicant decisions.
+- Updated citation/package metadata, the reproducible benchmark protocol, and
+  the current product roadmap.
 
 ## [0.3.0] - 2026-07-23
 
