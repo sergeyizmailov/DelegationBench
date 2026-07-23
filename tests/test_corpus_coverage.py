@@ -5,11 +5,12 @@ from pathlib import Path
 
 import yaml
 
+from delegationbench.corpus import corpus_path
 from delegationbench.scenario import load_scenario
 
-ROOT = Path(__file__).resolve().parents[1]
-ATTACKS = ROOT / "scenarios" / "attacks"
-BENIGN = ROOT / "scenarios" / "benign"
+CORPUS = corpus_path()
+ATTACKS = CORPUS / "attacks"
+BENIGN = CORPUS / "benign"
 
 NEW_PAIRS = tuple(
     (f"attack-{attack:03d}", f"benign-{attack - 1:03d}")
@@ -38,7 +39,7 @@ def _without_pair_metadata(document: dict) -> dict:
 
 
 def test_release_corpus_has_at_least_75_scenarios():
-    paths = list((ROOT / "scenarios").rglob("*.yaml"))
+    paths = list(CORPUS.rglob("*.yaml"))
     assert len(paths) >= 75
 
 

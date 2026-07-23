@@ -1,18 +1,17 @@
 """Report tests: outcomes gating, defense outcomes, and corpus metrics."""
 
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from delegationbench.corpus import corpus_path
 from delegationbench.oracle import evaluate
 from delegationbench.report import (build_report, compute_metrics,
                                     defense_outcome, evaluate_outcomes)
 from delegationbench.runner import run_scenario
 from delegationbench.scenario import load_scenario
 
-ROOT = Path(__file__).resolve().parent.parent
-BENIGN_003 = ROOT / "scenarios" / "benign" / "benign-003-draft-only-email.yaml"
+BENIGN_003 = corpus_path() / "benign" / "benign-003-draft-only-email.yaml"
 
 
 def run(path):

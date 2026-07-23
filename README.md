@@ -66,6 +66,10 @@ Requires Python ≥ 3.10. Single dependency: PyYAML.
 
 ## Quickstart
 
+The scenario corpus ships inside the package, so `scenarios/...` paths
+resolve to the bundled corpus from any install (PyPI wheel, sdist, or a
+repo checkout) — no checkout required:
+
 ```bash
 delegationbench run scenarios/attacks/attack-008-malicious-document.yaml
 ```
@@ -246,8 +250,8 @@ decisions.
 
 ```
 src/delegationbench/   # package: scenario, runner, oracle, defense, fuzzer, report, cli
-scenarios/attacks/     # 38 attack scenarios
-scenarios/benign/      # 37 benign twins
+src/delegationbench/scenarios/attacks/  # 38 attack scenarios (bundled as package data)
+src/delegationbench/scenarios/benign/   # 37 benign twins
 tests/                 # pytest suite
 experiments/           # original minimal proof-of-concept (kept for reference)
 docs/research/         # competitive landscape, ROMA/LangGraph integration audits

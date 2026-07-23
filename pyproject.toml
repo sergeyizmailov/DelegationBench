@@ -47,3 +47,9 @@ delegationbench = "delegationbench.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# The scenario corpus ships inside the package so the documented
+# `delegationbench run scenarios/` works from a wheel or sdist install,
+# not only from a repo checkout.
+[tool.setuptools.package-data]
+delegationbench = ["scenarios/attacks/*.yaml", "scenarios/benign/*.yaml"]

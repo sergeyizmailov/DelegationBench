@@ -19,6 +19,7 @@ from pathlib import Path
 
 from . import __version__
 from .agents import EngineError
+from .corpus import resolve_scenario_path
 from .defense import EnvelopeGuard, signing_key_from_env
 from .fuzzer import render_campaign_summary, run_campaign
 from .oracle import evaluate
@@ -101,10 +102,20 @@ def _write_benchmark_report(args: argparse.Namespace, reports: list[dict],
     print(f"Wrote versioned benchmark report {path}", file=sys.stderr)
 
 
+def _resolve_or_error(arg: str) -> Path | None:
+    """Resolve a CLI path, falling back to the bundled corpus."""
+    target, from_bundle = resolve_scenario_path(arg)
+    if target is not None and from_bundle:
+        print(f"note: {arg} not found locally; using the bundled "
+              f"scenario corpus ({target})", file=sys.stderr)
+    return target
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
-    target = Path(args.path)
-    if not target.exists():
-        print(f"error: no such file or directory: {target}", file=sys.stderr)
+    target = _resolve_or_error(args.path)
+    if target is None:
+        print(f"error: no such file or directory: {args.path}",
+              file=sys.stderr)
         return EXIT_ERROR
 
     if target.is_dir():
@@ -189,9 +200,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 
 def _cmd_fuzz(args: argparse.Namespace) -> int:
-    seed = Path(args.path)
-    if not seed.is_file():
-        print(f"error: no such file: {seed}", file=sys.stderr)
+    seed = _resolve_or_error(args.path)
+    if seed is None or not seed.is_file():
+        print(f"error: no such file: {args.path}", file=sys.stderr)
         return EXIT_ERROR
     try:
         report = run_campaign(seed, budget=args.budget, seed=args.seed,

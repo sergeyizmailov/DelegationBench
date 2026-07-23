@@ -2,13 +2,13 @@
 
 import dataclasses
 import warnings
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from delegationbench.cli import main
 from delegationbench.clock import VirtualClock
+from delegationbench.corpus import corpus_path
 from delegationbench.defense import (DEFAULT_SIGNING_KEY, EnvelopeGuard,
                                      signing_key_from_env)
 from delegationbench.envelope import Envelope
@@ -21,10 +21,9 @@ from delegationbench.scenario import (Grant, Resources, Scenario,
                                       load_scenario)
 from delegationbench.trace import BlockedError
 
-ROOT = Path(__file__).resolve().parent.parent
-ATTACKS_DIR = ROOT / "scenarios" / "attacks"
-BENIGN_DIR = ROOT / "scenarios" / "benign"
-SCENARIOS_DIR = ROOT / "scenarios"
+SCENARIOS_DIR = corpus_path()
+ATTACKS_DIR = SCENARIOS_DIR / "attacks"
+BENIGN_DIR = SCENARIOS_DIR / "benign"
 ATTACK_008 = ATTACKS_DIR / "attack-008-malicious-document.yaml"
 
 AGENT = SimpleNamespace(name="tester")

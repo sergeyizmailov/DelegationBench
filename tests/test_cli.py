@@ -1,14 +1,13 @@
 """CLI tests: exit codes and output formats."""
 
 import json
-from pathlib import Path
 
 from delegationbench.cli import main
+from delegationbench.corpus import corpus_path
 
-ROOT = Path(__file__).resolve().parent.parent
-ATTACK = ROOT / "scenarios" / "attacks" / "attack-008-malicious-document.yaml"
-BENIGN = ROOT / "scenarios" / "benign" / "benign-001-approved-payment.yaml"
-SCENARIOS_DIR = ROOT / "scenarios"
+SCENARIOS_DIR = corpus_path()
+ATTACK = SCENARIOS_DIR / "attacks" / "attack-008-malicious-document.yaml"
+BENIGN = SCENARIOS_DIR / "benign" / "benign-001-approved-payment.yaml"
 
 
 def test_run_attack_exit_0(capsys):
@@ -45,8 +44,31 @@ def test_json_format_is_valid_json(capsys):
 
 
 def test_missing_file_exit_2(capsys):
-    assert main(["run", str(ROOT / "scenarios" / "nope.yaml")]) == 2
+    # Neither a local path nor the bundled corpus has this file.
+    assert main(["run", "scenarios/nope.yaml"]) == 2
     assert "error" in capsys.readouterr().err
+
+
+def test_bundled_corpus_fallback_directory(tmp_path, monkeypatch, capsys):
+    """`run scenarios/` with no local scenarios/ resolves against the
+    corpus bundled inside the package (wheel/sdist install context)."""
+    monkeypatch.chdir(tmp_path)
+    n_scenarios = len(list(SCENARIOS_DIR.rglob("*.yaml")))
+    assert main(["run", "scenarios/"]) == 0
+    captured = capsys.readouterr()
+    assert "bundled scenario corpus" in captured.err
+    assert f"{n_scenarios}/{n_scenarios} scenarios match expectations" \
+        in captured.out
+
+
+def test_bundled_corpus_fallback_single_file(tmp_path, monkeypatch, capsys):
+    """Single-file resolution through the same bundled-corpus fallback."""
+    monkeypatch.chdir(tmp_path)
+    assert main(["run",
+                 "scenarios/attacks/attack-008-malicious-document.yaml"]) == 0
+    captured = capsys.readouterr()
+    assert "bundled scenario corpus" in captured.err
+    assert "FAIL: Cross-agent privilege escalation" in captured.out
 
 
 def test_invalid_scenario_exit_2(tmp_path, capsys):
