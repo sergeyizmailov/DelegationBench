@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/banner.png" alt="DelegationBench — open crash tests for privilege escalation across AI agent handoffs" width="100%">
+  <img src=".github/assets/delegationbench-hero.png" alt="DelegationBench — open crash tests for authority escalation across AI agent handoffs" width="100%">
 </p>
 
 <p align="center">
