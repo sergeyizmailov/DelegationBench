@@ -13,9 +13,8 @@
   <a href="#quickstart">Quickstart</a> ·
   <a href="THREAT_MODEL.md">Threat model</a> ·
   <a href="docs/scenario-coverage.md">Scenario coverage</a> ·
+  <a href="docs/benchmark-protocol.md">Benchmark protocol</a> ·
   <a href="docs/validation-kit.md">Validation kit</a> ·
-  <a href="output/pdf/delegationbench-sentient-technical-brief.pdf">Technical brief</a> ·
-  <a href="docs/grant-readiness.md">Grant readiness</a> ·
   <a href="ROADMAP.md">Roadmap</a> ·
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
@@ -250,7 +249,6 @@ experiments/           # original minimal proof-of-concept (kept for reference)
 docs/research/         # competitive landscape, ROMA/LangGraph integration audits
 benchmarks/             # protocol and reviewed real-model result artifacts
 THREAT_MODEL.md        # formal scope: what we test and what we deliberately don't
-GO_NO_GO.md            # feasibility decision record
 ```
 
 ## What DelegationBench is not

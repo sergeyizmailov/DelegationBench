@@ -13,9 +13,8 @@ Envelopes may carry an optional HMAC-SHA256 ``signature`` over their
 authority fields (stdlib ``hmac``/``hashlib`` only). An envelope holding
 a ``signing_key`` re-signs on ``derive()``; verification happens in the
 reference defense (``defense.EnvelopeGuard``), not here. HMAC is the
-benchmark reference; Ed25519 is the intended production upgrade (see
-PROJECT_PLAN.md §8) so that agents can verify envelopes without holding
-a shared key.
+benchmark reference; Ed25519 is the intended production upgrade so that
+agents can verify envelopes without holding a shared key.
 """
 
 from __future__ import annotations

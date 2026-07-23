@@ -18,8 +18,8 @@ python examples/langgraph_real_llm_demo.py \
   --output benchmarks/results/MODEL_SLUG.json
 ```
 
-Before committing a result, verify the evidence checklist in
-[docs/grant-readiness.md](../docs/grant-readiness.md), including exact model and
+Before committing a result, follow the
+[benchmark protocol](../docs/benchmark-protocol.md), including exact model and
 server versions, hardware, configuration, repeated attack and benign trials,
 errors, aggregate rates, and per-run traces.
 
