@@ -72,6 +72,93 @@ Quote approved for publication:
 Follow-up:
 ```
 
+## Outreach message templates
+
+Short, trace-first, no marketing. Adapt names and send.
+
+### ROMA maintainers (validation + license question, one message)
+
+```text
+Subject: Delegation governance testing for ROMA + license clarification
+
+Hi — I built DelegationBench, an open-source (Apache-2.0) testbed that checks
+whether authority expands across agent delegation chains. It is relevant to
+the problems raised in ROMA issues #90 (agent identity) and #92 (chain of
+custody): instead of proposing another governance mechanism, it tests whether
+such mechanisms actually prevent escalation, with a deterministic oracle — no
+LLM judge.
+
+A real verdict looks like:
+
+  User grant: ['docs.read']
+  Delegation path: reader -> payment
+  Unauthorized action: payment.execute
+  Verdict: V1 authority expansion + V2 confused deputy
+
+Repo: https://github.com/sergeyizmailov/delegationbench (v0.4.3, on PyPI).
+There is a clean-room ROMA adapter (src/delegationbench/adapters/roma.py) that
+observes task trees and tool calls through public runtime interfaces only.
+
+Two questions:
+1. Would you run a test like this in CI against ROMA task runs? What would
+   block the integration (trace gaps, APIs, relevance)?
+2. License: the ROMA repo has no LICENSE file (README references one that is
+   missing). Could you clarify the licensing status? We deliberately do not
+   copy or derive from ROMA code until this is resolved.
+
+Happy to open an issue/discussion instead if you prefer.
+```
+
+### Framework developers (LangGraph / CrewAI)
+
+```text
+Subject: Do your handoffs leak authority? An open crash test
+
+Hi — DelegationBench is an open testbed for one specific failure mode: a
+low-authority agent gets a higher-authority agent to act outside the
+originating user's grant, although every agent stays within its own
+permissions. It reconstructs the delegation tree from real framework traces
+and judges it deterministically (V1–V7: authority expansion, confused deputy,
+depth, expiry/replay, origin loss, result-driven widening, principal
+substitution).
+
+For LangGraph there is a working adapter: a callback handler attached via
+config={"callbacks": [...]} — no framework modification. Real graph runs pass
+in CI (two-agent supervisor, handoff via Command(goto=...)).
+
+  pip install delegationbench
+  delegationbench run scenarios/ --defense envelope
+
+Would you run this in CI? What execution data could your framework expose
+that we currently cannot see? What report format (JSON/JUnit/SARIF) would you
+actually consume?
+
+https://github.com/sergeyizmailov/delegationbench
+```
+
+### AI security engineers / red teams (OWASP ASI, ATR)
+
+```text
+Subject: Executable tests for cross-agent privilege escalation (ASI03/ASI07)
+
+Hi — DelegationBench turns cross-agent privilege escalation into executable,
+CI-runnable tests: 38 attack scenarios + 37 benign twins, deterministic
+oracle, a reference defense (delegation envelope guard), and a fuzzer that
+hunts defense bypasses and minimizes them to regression scenarios. Findings
+map to OWASP Agentic Top 10 (ASI03/ASI07) and CWE-441 in SARIF output.
+
+Closest neighbor: Agent Threat Rules detects this threat class in traffic;
+DelegationBench tests authorization across the delegation chain itself.
+Scenario packs could be shared.
+
+Would a test like this fit your workflow? What is missing for it to be
+useful to a red team? 30 seconds to try:
+
+  pip install delegationbench && delegationbench run scenarios/
+
+https://github.com/sergeyizmailov/delegationbench
+```
+
 ## Responses
 
 _(none yet — pending outreach; 0/3–5, workflow/CI confirmations: 0/1)_

@@ -62,6 +62,20 @@ can be uploaded to GitHub code scanning. The JSON document includes the
 DelegationBench version, Git commit, command, environment, metrics, and
 complete per-scenario traces.
 
+### Taxonomy tags
+
+SARIF findings carry security-taxonomy metadata: each violation rule
+(V1–V7) is mapped to the OWASP Agentic Top 10 (`ASI03` Identity &
+Privilege Abuse, `ASI07` Insecure Inter-Agent Communication), to CWE
+(e.g. `CWE-269`, `CWE-441`, `CWE-863`, `CWE-290`), and — where the
+violation is delivered by indirect prompt injection (V2, V6) — to MITRE
+ATLAS (`AML.T0051.001`). The taxonomies are declared once in the SARIF
+driver (`tool.driver.taxa`), and each rule references them via
+`relationships` plus human-readable `properties.tags`, so the GitHub
+Security tab renders findings with taxonomy labels. The
+`scenario-load-error` rule is deliberately untagged: it is a harness
+error, not a security finding.
+
 The action attempts both JUnit and SARIF generation before returning a
 failure. This ensures that a security regression still leaves diagnostic
 artifacts instead of stopping after the first report command.
