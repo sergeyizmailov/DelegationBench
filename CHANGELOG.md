@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-07-23
+
+### Fixed
+
+- Use an absolute GitHub asset URL so the project hero renders correctly on
+  PyPI and other package-index mirrors.
+- Add a direct PyPI version badge to the repository README.
+
 ## [0.4.2] - 2026-07-23
 
 ### Changed
@@ -217,7 +225,8 @@ Initial public release.
 - **CI** — GitHub Actions: pytest plus full corpus runs with and without the
   reference defense, on Python 3.10/3.12/3.13.
 
-[Unreleased]: https://github.com/sergeyizmailov/delegationbench/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/sergeyizmailov/delegationbench/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.3
 [0.4.2]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.2
 [0.4.1]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.1
 [0.4.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.0
