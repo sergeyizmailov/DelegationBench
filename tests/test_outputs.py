@@ -124,6 +124,78 @@ def test_sarif_reports_errored_files_as_results():
         "V1", "V2", "V3", "V4", "V5", "V6", "V7"}
 
 
+def test_sarif_declares_taxonomies_once():
+    """The driver declares each referenced taxonomy exactly once, with
+    the taxa (ids) the rules reference."""
+    sarif = reports_to_sarif([report()])
+    taxa = sarif["runs"][0]["tool"]["driver"]["taxa"]
+    assert [t["name"] for t in taxa] == [
+        "OWASP Agentic Top 10", "CWE", "MITRE ATLAS",
+    ]
+    by_name = {t["name"]: t for t in taxa}
+    assert {t["id"] for t in by_name["OWASP Agentic Top 10"]["taxa"]} == {
+        "ASI03", "ASI07",
+    }
+    assert {t["id"] for t in by_name["CWE"]["taxa"]} == {
+        "CWE-269", "CWE-290", "CWE-441", "CWE-863",
+    }
+    assert {t["id"] for t in by_name["MITRE ATLAS"]["taxa"]} == {
+        "AML.T0051.001",
+    }
+    assert by_name["CWE"]["informationUri"] == "https://cwe.mitre.org"
+
+
+EXPECTED_TAXONOMY = {
+    "V1": {"ASI03", "CWE-269", "CWE-863"},
+    "V2": {"ASI03", "CWE-441", "AML.T0051.001"},
+    "V3": {"ASI07", "CWE-269"},
+    "V4": {"ASI07", "CWE-863"},
+    "V5": {"ASI07", "CWE-863"},
+    "V6": {"ASI07", "CWE-863", "AML.T0051.001"},
+    "V7": {"ASI03", "CWE-290"},
+}
+
+
+def test_sarif_rules_map_to_taxonomies():
+    """Each violation rule carries the expected taxonomy ids both as
+    relationships and as human-readable tags."""
+    sarif = reports_to_sarif([report()])
+    rules = {r["id"]: r for r in sarif["runs"][0]["tool"]["driver"]["rules"]}
+    for kind, taxon_ids in EXPECTED_TAXONOMY.items():
+        rule = rules[kind]
+        related = {rel["target"]["id"] for rel in rule["relationships"]}
+        assert related == taxon_ids
+        tags = set(rule["properties"]["tags"])
+        assert taxon_ids <= tags
+        assert "security" in tags
+        assert rule["fullDescription"]["text"]
+
+
+def test_sarif_relationships_reference_declared_taxa():
+    """No rule references a taxon that the driver does not declare, and
+    the scenario-load-error rule stays untagged (not a security
+    finding)."""
+    sarif = reports_to_sarif(
+        [report()],
+        errors=[{"file": "scenarios/broken.yaml",
+                 "error": "invalid YAML", "type": "ScenarioError"}])
+    driver = sarif["runs"][0]["tool"]["driver"]
+    declared = {
+        (taxon["id"], taxonomy["name"])
+        for taxonomy in driver["taxa"]
+        for taxon in taxonomy["taxa"]
+    }
+    rules = {r["id"]: r for r in driver["rules"]}
+    for kind in EXPECTED_TAXONOMY:
+        for rel in rules[kind]["relationships"]:
+            target = (rel["target"]["id"],
+                      rel["target"]["toolComponent"]["name"])
+            assert target in declared
+    load_error = rules["scenario-load-error"]
+    assert "relationships" not in load_error
+    assert "tags" not in load_error.get("properties", {})
+
+
 def test_benchmark_document_and_json_writer(tmp_path):
     document = benchmark_document(
         [report()],

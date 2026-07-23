@@ -8,6 +8,7 @@
   <a href="https://pypi.org/project/delegationbench/"><img src="https://img.shields.io/pypi/v/delegationbench" alt="PyPI"></a>
   <a href="https://github.com/sergeyizmailov/DelegationBench/releases/latest"><img src="https://img.shields.io/github/v/release/sergeyizmailov/DelegationBench" alt="Latest release"></a>
   <a href="https://github.com/sergeyizmailov/DelegationBench/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+  <a href="https://securityscorecards.dev/viewer/?uri=github.com/sergeyizmailov/delegationbench"><img src="https://api.securityscorecards.dev/projects/github.com/sergeyizmailov/delegationbench/badge" alt="OpenSSF Scorecard"></a>
 </p>
 
 <p align="center">
