@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added tokenless PyPI Trusted Publishing automation and a release runbook.
 
+### Fixed
+
+- Pinned the OpenSSF Scorecard workflow to a valid release commit and granted
+  the analysis job the minimum repository-read permission it requires.
+
 ## [0.4.4] - 2026-07-23
 
 ### Added
