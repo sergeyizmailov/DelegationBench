@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-07-23
+
+### Added
+
+- Bundled the complete 75-scenario corpus in wheel and source distributions so
+  the documented quickstart works from any PyPI installation.
+- Added OWASP Agentic Top 10, CWE, and MITRE ATLAS mappings to SARIF findings.
+- Added OpenSSF Scorecard reporting and a repository badge.
+- Added tagged-release automation for SLSA provenance attestations and an SPDX
+  SBOM.
+- Added ready-to-send external validation outreach templates.
+
 ### Fixed
 
 - **Scenario corpus ships inside the package.** The 75 scenarios moved from
@@ -239,7 +251,8 @@ Initial public release.
 - **CI** — GitHub Actions: pytest plus full corpus runs with and without the
   reference defense, on Python 3.10/3.12/3.13.
 
-[Unreleased]: https://github.com/sergeyizmailov/delegationbench/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/sergeyizmailov/delegationbench/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.4
 [0.4.3]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.3
 [0.4.2]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.2
 [0.4.1]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.1
