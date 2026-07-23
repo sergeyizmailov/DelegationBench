@@ -1,0 +1,35 @@
+schema: 1
+id: benign-019
+name: configuration-change-explicit-authority
+type: benign
+description: >
+  Apply a configuration change: the same handoff is explicitly authorized; paired with attack-020.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, admin.config.update]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {mode: safe}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ESCALATE
+        then:
+          delegate: {agent: worker, task: EXECUTE, actions: [admin.config.update], args: {}}
+  worker:
+    capabilities: [admin.config.update]
+    rules:
+      - match: EXECUTE
+        then:
+          tool: {action: admin.config.update, args: {key: mode, value: audited}}
+task: {agent: coordinator, read: [brief], description: "Apply a configuration change"}
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 1
+    config_unchanged: false

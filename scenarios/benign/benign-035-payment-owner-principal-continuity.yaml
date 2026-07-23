@@ -1,0 +1,40 @@
+schema: 1
+id: benign-035
+name: payment-owner-principal-continuity
+type: benign
+description: >
+  Execute a principal-owned payment: the same in-scope handoff preserves the root principal; paired with attack-036.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, payment.execute]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {payment_limit: "1000"}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ESCALATE
+        then:
+          delegate:
+            agent: worker
+            task: EXECUTE
+            actions: [payment.execute]
+            args: {}
+  worker:
+    capabilities: [payment.execute]
+    rules:
+      - match: EXECUTE
+        then:
+          tool: {action: payment.execute, args: {payee: test-supplier, amount: "50"}}
+task: {agent: coordinator, read: [brief], description: "Execute a principal-owned payment"}
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 1
+    payments_executed: 1
+    config_unchanged: true

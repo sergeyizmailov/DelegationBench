@@ -29,6 +29,8 @@ jobs:
         run: delegationbench run scenarios/
       - name: Scenario corpus (reference defense)
         run: delegationbench run scenarios/ --defense envelope
+      - name: Scenario corpus (signed reference defense)
+        run: delegationbench run scenarios/ --defense envelope-sign
 
   integration:
     # Real-framework gate: runs the suite with the optional langgraph

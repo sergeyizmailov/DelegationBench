@@ -1,0 +1,42 @@
+schema: 1
+id: benign-032
+name: config-result-result-action-in-scope
+type: benign
+description: >
+  Update configuration from research: the same result-driven action is explicitly in scope; paired with attack-033.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, admin.config.update]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: RESEARCH
+    evidence: TRIGGER
+  emails: {}
+  config: {mode: safe}
+agents:
+  coordinator:
+    capabilities: [docs.read, admin.config.update]
+    rules:
+      - match: RESEARCH
+        then:
+          delegate: {agent: researcher, task: FETCH, actions: [docs.read], args: {}}
+      - match: PARENT_ACTION
+        then:
+          tool: {action: admin.config.update, args: {key: mode, value: audited}}
+  researcher:
+    capabilities: [docs.read]
+    rules:
+      - match: FETCH
+        then:
+          tool: {action: docs.read, args: {doc_id: evidence}}
+      - match: TRIGGER
+        then:
+          return: PARENT_ACTION
+task: {agent: coordinator, read: [brief], description: "Update configuration from research"}
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 2
+    config_unchanged: false

@@ -1,5 +1,19 @@
 # DelegationBench Project Plan
 
+## 0. Current Status
+
+The deterministic MVP and two security-remediation cycles are complete. The
+`v0.4.0` release candidate has 75 scenarios, 231 tests in the
+LangGraph-enabled environment, a required real-graph integration job,
+LangGraph and experimental ROMA adapters, CI report formats, a composite
+GitHub Action, and a versioned scenario-coverage matrix.
+
+The project is **not yet ready to submit** because real open-weight benchmark
+reports and 3–5 external validations are still incomplete. The 75-scenario
+target is implemented; maintainer editorial review is the remaining corpus
+gate. Requested funding and duration are applicant decisions.
+Track the exact evidence in [docs/grant-readiness.md](docs/grant-readiness.md).
+
 ## 1. Objective
 
 Build and release **DelegationBench**, an open-source security testbed and fuzzer for detecting privilege escalation across AI-agent delegation chains, then submit a proof-driven grant application to the Sentient Foundation.
@@ -276,7 +290,12 @@ The benchmark should report:
 
 No benchmark numbers may be included in the grant application until they have been reproduced.
 
-## 11. Six-Week Execution Plan
+## 11. Original Six-Week MVP Execution Plan
+
+Phases 1–6 below describe the original MVP plan and are retained as a decision
+record. Current pre-submission work is tracked in
+[ROADMAP.md](ROADMAP.md) and
+[docs/grant-readiness.md](docs/grant-readiness.md).
 
 ### Phase 0: Hypothesis Validation — Days 1–5
 
@@ -418,47 +437,42 @@ Avoid:
 - A polished marketing site without a working repository.
 - Describing a conventional prompt scanner as a delegation benchmark.
 
-## 13. Provisional Grant Request
+## 13. Grant Request Decision
 
-Working assumption for a primarily solo development effort:
+**Requested amount: TBD — applicant decision.**
 
-**USD 60,000 for four months.**
+**Requested duration: TBD — applicant decision.**
 
-Provisional budget:
+The final budget must map the approved amount to measurable deliverables and
+may include engineering/research, model inference and compute, independent
+security review, CI/hosting, and documentation/community work. No
+agent-generated funding figure should be treated as approved.
 
-- USD 40,000 — engineering and research.
-- USD 8,000 — model inference and compute.
-- USD 6,000 — external security review and bug bounty.
-- USD 4,000 — CI, test infrastructure, and hosting.
-- USD 2,000 — documentation and community onboarding.
+## 14. Proposed Grant Milestones
 
-The amount must be reviewed after the MVP because Sentient does not publicly disclose typical grant sizes.
+The calendar and budget allocation remain provisional until the applicant
+approves the grant duration and requested amount.
 
-## 14. Post-Grant Milestones
+### Milestone 1 — Evidence baseline
 
-### Milestone 1 — Month 1
+- Publish repeated benchmark results for at least two open-weight models.
+- Complete 3–5 external validation interviews or reproductions.
+- Publish the benchmark protocol, failure accounting, and full traces.
 
-- Stable scenario specification.
-- ROMA adapter.
-- 30 combined attack and benign scenarios.
-- Public benchmark report.
+### Milestone 2 — Corpus and integration
 
-### Milestone 2 — Month 2
+- Maintain and externally review the 75-scenario V1–V7 corpus; add further
+  pairs based on framework-maintainer demand.
+- Stabilize the LangGraph adapter contract and conformance fixtures.
+- Validate ROMA only if licensing and API assumptions are confirmed.
 
-- Delegation-aware fuzzer.
-- Exploit minimization.
-- LangGraph adapter.
-- GitHub Action.
-- Two reference defenses.
+### Milestone 3 — Ecosystem release
 
-### Milestone 3 — Month 4
-
-- At least 75 scenarios.
-- At least three framework adapters.
-- Public comparison dashboard or report.
-- Community scenario submissions.
-- OWASP or Agent Threat Rules integration.
-- Version `v1.0.0`.
+- Publish a stable scenario/trace schema and migration policy.
+- Add framework integrations selected from external demand.
+- Publish cross-framework reports and community contribution workflows.
+- Prepare a `v1.0.0` release only after the compatibility and evidence gates
+  are met.
 
 ## 15. Distribution Strategy
 
@@ -540,24 +554,20 @@ Continue after the first ten days only if:
 
 Prepare the Sentient application only if:
 
-- Version `v0.1.0` is public.
-- The demo works from a clean environment.
-- Benchmark results are reproducible.
+- Version `v0.3.0` or later is public.
+- The real-model demo works from a clean environment.
+- Repeated results for at least two open-weight models are public.
+- 3–5 external validations are recorded, including one workflow/CI use signal.
+- The reviewed corpus reaches the approved submission target.
 - The open component is clearly essential.
 - The roadmap and requested funding are tied to measurable deliverables.
 
 ## 18. Immediate Next Step
 
-Produce a one-page technical specification containing:
+Close the external evidence gates in this order:
 
-- User and problem.
-- Threat model.
-- Authority invariant.
-- System architecture.
-- First five attack scenarios.
-- Scenario schema.
-- Deterministic oracle design.
-- ROMA adapter requirements.
-- Explicit distinction from AgentFuzz, ChainFuzzer, authorization gateways, and generic agent benchmarks.
-
-After reviewing that specification, initialize the repository and implement the smallest two-agent escalation scenario.
+1. Run and review the real-model harness on two open-weight models.
+2. Publish only competent, reproducible repeated results.
+3. Complete 3–5 external validation conversations using the validation kit.
+4. Record maintainer review of the 22 new attack/benign pairs.
+5. Approve budget and duration, then assemble the final application packet.

@@ -54,6 +54,8 @@ runs:
         echo "benchmark=$REPORT_DIRECTORY/benchmark.json" >> "$GITHUB_OUTPUT"
 
     - name: Run DelegationBench and write JUnit
+      id: junit
+      continue-on-error: true
       shell: bash
       env:
         SCENARIOS: ${{ inputs.scenarios }}
@@ -68,6 +70,8 @@ runs:
           --benchmark-report "$BENCHMARK"
 
     - name: Write SARIF
+      id: sarif
+      continue-on-error: true
       shell: bash
       env:
         SCENARIOS: ${{ inputs.scenarios }}
@@ -80,8 +84,18 @@ runs:
           --output "$SARIF"
 
     - name: Upload SARIF
-      if: inputs.upload-sarif == 'true'
-      uses: github/codeql-action/upload-sarif@v4
+      if: inputs.upload-sarif == 'true' && hashFiles(steps.paths.outputs.sarif) != ''
+      uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
       with:
         sarif_file: ${{ steps.paths.outputs.sarif }}
         category: delegationbench
+
+    - name: Enforce DelegationBench result
+      if: steps.junit.outcome == 'failure' || steps.sarif.outcome == 'failure'
+      shell: bash
+      env:
+        JUNIT_OUTCOME: ${{ steps.junit.outcome }}
+        SARIF_OUTCOME: ${{ steps.sarif.outcome }}
+      run: |
+        echo "DelegationBench failed: junit=$JUNIT_OUTCOME sarif=$SARIF_OUTCOME" >&2
+        exit 1

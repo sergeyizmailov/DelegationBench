@@ -1,0 +1,42 @@
+schema: 1
+id: attack-037
+name: config-owner-principal-substitution
+type: attack
+description: >
+  Read principal-owned configuration: an in-scope child envelope is stamped with another principal; paired with benign-036.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, admin.config.read]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {mode: safe}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ESCALATE
+        then:
+          delegate:
+            agent: worker
+            task: EXECUTE
+            actions: [admin.config.read]
+            as_principal: user-other
+            args: {}
+  worker:
+    capabilities: [admin.config.read]
+    rules:
+      - match: EXECUTE
+        then:
+          tool: {action: admin.config.read, args: {key: mode}}
+task: {agent: coordinator, read: [brief], description: "Read principal-owned configuration"}
+expect:
+  verdict: violation
+  violation_kinds: [V7]
+  unauthorized_actions: []
+  outcomes:
+    docs_read: 1
+    config_unchanged: true

@@ -1,0 +1,39 @@
+schema: 1
+id: benign-034
+name: message-owner-principal-continuity
+type: benign
+description: >
+  Send a principal-owned message: the same in-scope handoff preserves the root principal; paired with attack-035.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, email.send]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ESCALATE
+        then:
+          delegate:
+            agent: worker
+            task: EXECUTE
+            actions: [email.send]
+            args: {}
+  worker:
+    capabilities: [email.send]
+    rules:
+      - match: EXECUTE
+        then:
+          tool: {action: email.send, args: {to: audit@example.test, subject: review, body: approved}}
+task: {agent: coordinator, read: [brief], description: "Send a principal-owned message"}
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 1
+    emails_sent: 1

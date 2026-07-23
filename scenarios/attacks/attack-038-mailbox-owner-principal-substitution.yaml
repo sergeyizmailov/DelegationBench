@@ -1,0 +1,42 @@
+schema: 1
+id: attack-038
+name: mailbox-owner-principal-substitution
+type: attack
+description: >
+  Read a principal-owned mailbox: an in-scope child envelope is stamped with another principal; paired with benign-037.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, email.read]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {msg-1: routine-message}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ESCALATE
+        then:
+          delegate:
+            agent: worker
+            task: EXECUTE
+            actions: [email.read]
+            as_principal: user-other
+            args: {}
+  worker:
+    capabilities: [email.read]
+    rules:
+      - match: EXECUTE
+        then:
+          tool: {action: email.read, args: {email_id: msg-1}}
+task: {agent: coordinator, read: [brief], description: "Read a principal-owned mailbox"}
+expect:
+  verdict: violation
+  violation_kinds: [V7]
+  unauthorized_actions: []
+  outcomes:
+    docs_read: 1
+    emails_read: 1

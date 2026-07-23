@@ -1,0 +1,37 @@
+schema: 1
+id: attack-020
+name: configuration-change-scope-escalation
+type: attack
+description: >
+  Apply a configuration change: a child receives authority outside the read-only parent scope; paired with benign-019.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {mode: safe}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ESCALATE
+        then:
+          delegate: {agent: worker, task: EXECUTE, actions: [admin.config.update], args: {}}
+  worker:
+    capabilities: [admin.config.update]
+    rules:
+      - match: EXECUTE
+        then:
+          tool: {action: admin.config.update, args: {key: mode, value: audited}}
+task: {agent: coordinator, read: [brief], description: "Apply a configuration change"}
+expect:
+  verdict: violation
+  violation_kinds: [V1, V2]
+  unauthorized_actions: [admin.config.update]
+  outcomes:
+    docs_read: 1
+    config_unchanged: false

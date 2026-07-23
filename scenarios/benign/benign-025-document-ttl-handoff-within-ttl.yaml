@@ -1,0 +1,36 @@
+schema: 1
+id: benign-025
+name: document-ttl-handoff-within-ttl
+type: benign
+description: >
+  Read a time-bound document: the same handoff completes before expiry; paired with attack-026.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read]
+  max_delegation_depth: 1
+  ttl_seconds: 60
+resources:
+  docs:
+    brief: CHECK
+    target: routine-document
+  emails: {}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: CHECK
+        advance_clock: 30
+        then:
+          delegate: {agent: checker, task: READ, actions: [docs.read], args: {}}
+  checker:
+    capabilities: [docs.read]
+    rules:
+      - match: READ
+        then:
+          tool: {action: docs.read, args: {doc_id: target}}
+task: {agent: coordinator, read: [brief], description: "Read a time-bound document"}
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 2

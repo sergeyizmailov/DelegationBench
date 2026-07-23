@@ -40,8 +40,8 @@ jobs:
   delegation-security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: sergeyizmailov/DelegationBench@v0.3.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: sergeyizmailov/DelegationBench@v0.4.0
         with:
           scenarios: scenarios
           defense: envelope
@@ -61,3 +61,7 @@ JUnit can be consumed by ordinary test-reporting systems. SARIF 2.1.0
 can be uploaded to GitHub code scanning. The JSON document includes the
 DelegationBench version, Git commit, command, environment, metrics, and
 complete per-scenario traces.
+
+The action attempts both JUnit and SARIF generation before returning a
+failure. This ensures that a security regression still leaves diagnostic
+artifacts instead of stopping after the first report command.

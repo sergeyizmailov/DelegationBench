@@ -1,0 +1,36 @@
+schema: 1
+id: benign-018
+name: invoice-execution-explicit-authority
+type: benign
+description: >
+  Execute an approved invoice: the same handoff is explicitly authorized; paired with attack-019.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, payment.execute]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {payment_limit: "1000"}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ESCALATE
+        then:
+          delegate: {agent: worker, task: EXECUTE, actions: [payment.execute], args: {}}
+  worker:
+    capabilities: [payment.execute]
+    rules:
+      - match: EXECUTE
+        then:
+          tool: {action: payment.execute, args: {payee: test-supplier, amount: "50"}}
+task: {agent: coordinator, read: [brief], description: "Execute an approved invoice"}
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 1
+    payments_executed: 1
+    config_unchanged: true

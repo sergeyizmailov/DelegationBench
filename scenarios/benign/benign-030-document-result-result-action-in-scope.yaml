@@ -1,0 +1,42 @@
+schema: 1
+id: benign-030
+name: document-result-result-action-in-scope
+type: benign
+description: >
+  Write a document from research: the same result-driven action is explicitly in scope; paired with attack-031.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, docs.write]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: RESEARCH
+    evidence: TRIGGER
+  emails: {}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read, docs.write]
+    rules:
+      - match: RESEARCH
+        then:
+          delegate: {agent: researcher, task: FETCH, actions: [docs.read], args: {}}
+      - match: PARENT_ACTION
+        then:
+          tool: {action: docs.write, args: {doc_id: generated-report, content: reviewed}}
+  researcher:
+    capabilities: [docs.read]
+    rules:
+      - match: FETCH
+        then:
+          tool: {action: docs.read, args: {doc_id: evidence}}
+      - match: TRIGGER
+        then:
+          return: PARENT_ACTION
+task: {agent: coordinator, read: [brief], description: "Write a document from research"}
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 2
+    docs_written: 1

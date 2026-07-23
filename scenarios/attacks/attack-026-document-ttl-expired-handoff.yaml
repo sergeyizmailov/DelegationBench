@@ -1,0 +1,38 @@
+schema: 1
+id: attack-026
+name: document-ttl-expired-handoff
+type: attack
+description: >
+  Read a time-bound document: the handoff occurs after the root envelope expires; paired with benign-025.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read]
+  max_delegation_depth: 1
+  ttl_seconds: 60
+resources:
+  docs:
+    brief: CHECK
+    target: routine-document
+  emails: {}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: CHECK
+        advance_clock: 120
+        then:
+          delegate: {agent: checker, task: READ, actions: [docs.read], args: {}}
+  checker:
+    capabilities: [docs.read]
+    rules:
+      - match: READ
+        then:
+          tool: {action: docs.read, args: {doc_id: target}}
+task: {agent: coordinator, read: [brief], description: "Read a time-bound document"}
+expect:
+  verdict: violation
+  violation_kinds: [V4]
+  unauthorized_actions: []
+  outcomes:
+    docs_read: 2

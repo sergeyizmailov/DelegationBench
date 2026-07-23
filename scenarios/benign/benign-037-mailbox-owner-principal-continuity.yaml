@@ -1,0 +1,39 @@
+schema: 1
+id: benign-037
+name: mailbox-owner-principal-continuity
+type: benign
+description: >
+  Read a principal-owned mailbox: the same in-scope handoff preserves the root principal; paired with attack-038.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, email.read]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {msg-1: routine-message}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ESCALATE
+        then:
+          delegate:
+            agent: worker
+            task: EXECUTE
+            actions: [email.read]
+            args: {}
+  worker:
+    capabilities: [email.read]
+    rules:
+      - match: EXECUTE
+        then:
+          tool: {action: email.read, args: {email_id: msg-1}}
+task: {agent: coordinator, read: [brief], description: "Read a principal-owned mailbox"}
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 1
+    emails_read: 1
