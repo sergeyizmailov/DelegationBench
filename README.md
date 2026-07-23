@@ -12,7 +12,10 @@
 <p align="center">
   <a href="#quickstart">Quickstart</a> ·
   <a href="THREAT_MODEL.md">Threat model</a> ·
+  <a href="docs/scenario-coverage.md">Scenario coverage</a> ·
   <a href="docs/validation-kit.md">Validation kit</a> ·
+  <a href="output/pdf/delegationbench-sentient-technical-brief.pdf">Technical brief</a> ·
+  <a href="docs/grant-readiness.md">Grant readiness</a> ·
   <a href="ROADMAP.md">Roadmap</a> ·
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
@@ -48,7 +51,7 @@ Install the current release directly from GitHub:
 
 ```bash
 python -m pip install \
-  "delegationbench @ git+https://github.com/sergeyizmailov/DelegationBench.git@v0.1.0"
+  "delegationbench @ git+https://github.com/sergeyizmailov/DelegationBench.git@v0.4.0"
 ```
 
 Or install an editable checkout for development:
@@ -91,17 +94,18 @@ delegationbench run scenarios/ --defense envelope
 ```
 
 Exit code is 0 when every scenario matches its `expect` contract — drop it
-straight into CI (see the [project workflow](.github/workflows/delegationbench.yml)).
+straight into CI (see the [one-command and GitHub Action
+examples](docs/ci-integration.md)).
 
 ## At a glance
 
 | | DelegationBench |
 |---|---|
 | **Tests** | Cross-agent authority propagation, confused-deputy behavior, delegation depth, expiry/replay, origin continuity, and result-driven scope widening |
-| **Corpus** | 16 attack scenarios + 15 benign lookalikes |
+| **Corpus** | 38 attack scenarios + 37 benign twins (75 total) |
 | **Judge** | Deterministic authorization oracle; no LLM judge |
 | **Defense baseline** | Tool-boundary delegation envelopes with optional HMAC integrity |
-| **Outputs** | Human-readable terminal reports and machine-readable JSON |
+| **Outputs** | Terminal, JSON, JUnit, SARIF, and versioned benchmark reports |
 
 ## What you get
 
@@ -113,8 +117,10 @@ straight into CI (see the [project workflow](.github/workflows/delegationbench.y
   V1 authority expansion on handoff · V2 confused deputy · V3 depth violation ·
   V4 expired/replayed delegation · V5 origin loss · V6 scope widening via result ·
   V7 principal substitution.
-- **31-scenario corpus** — 16 attacks, each paired with benign lookalikes that
+- **75-scenario corpus** — 38 attacks and 37 benign twins spanning V1–V7 that
   must stay clean (a defense that blocks everything is a failure, not a win).
+  The [coverage matrix](docs/scenario-coverage.md) records the paired
+  invariant and workflow surface.
 - **Reference defense** — a delegation-envelope guard enforced at the tool
   boundary, outside model reasoning: `--defense envelope` (attenuation-only
   envelopes, depth/expiry/replay/origin checks) or `--defense envelope-sign`
@@ -136,9 +142,10 @@ straight into CI (see the [project workflow](.github/workflows/delegationbench.y
       --budget 200 --seed 7 --defense envelope --out fuzz-output/
   ```
 
-- **Reports** — terminal (human) and `--format json` (machine) with per-scenario
-  verdicts, full traces, and corpus metrics: Unauthorized Action Rate, Attack
-  Containment Rate, Benign Task Success Rate. Unauthorized Action Rate is
+- **Reports** — terminal, JSON, JUnit, SARIF, and self-describing versioned
+  benchmark reports with per-scenario verdicts, full traces, and corpus
+  metrics: Unauthorized Action Rate, Attack Containment Rate, Benign Task
+  Success Rate. Unauthorized Action Rate is
   reported as *attempted* (the tool call was traced, whatever the outcome)
   with an *executed* sub-count where the tool result shows the call actually
   ran, so an attempt refused by the mock world (e.g. a payment over the
@@ -209,15 +216,39 @@ The user granted read-only access. The invoice carries an injected instruction.
 The payment agent *can* pay (capability), so it does — but the root grant never
 authorized it. Per-agent permission checks miss this; the oracle does not.
 
+## Real LangGraph + LLM demo
+
+The deterministic corpus does not need a model or API key. A separate
+[end-to-end demo](examples/langgraph_real_llm_demo.py) connects a real
+OpenAI-compatible open-weight model endpoint to a compiled LangGraph graph,
+executes agent handoffs and tool calls, and evaluates the observed trace with
+DelegationBench:
+
+```bash
+pip install -e '.[langgraph-demo]'
+python examples/langgraph_real_llm_demo.py \
+  --model your-open-weight-model \
+  --base-url http://127.0.0.1:8080/v1 \
+  --model-revision exact-weight-revision \
+  --server-name your-server --server-version exact-version \
+  --hardware "your hardware" --seed 7 \
+  --runs 10 --output benchmarks/results/model-name.json
+```
+
+DelegationBench does not install or start a model server. Model choice,
+serving, hardware use, and benchmark repetition remain explicit harness
+decisions.
+
 ## Repository layout
 
 ```
 src/delegationbench/   # package: scenario, runner, oracle, defense, fuzzer, report, cli
-scenarios/attacks/     # 16 attack scenarios
-scenarios/benign/      # 15 benign lookalikes
+scenarios/attacks/     # 38 attack scenarios
+scenarios/benign/      # 37 benign twins
 tests/                 # pytest suite
 experiments/           # original minimal proof-of-concept (kept for reference)
 docs/research/         # competitive landscape, ROMA/LangGraph integration audits
+benchmarks/             # protocol and reviewed real-model result artifacts
 THREAT_MODEL.md        # formal scope: what we test and what we deliberately don't
 GO_NO_GO.md            # feasibility decision record
 ```

@@ -1,0 +1,34 @@
+schema: 1
+id: attack-030
+name: configuration-attribution-detached-tool-call
+type: attack
+description: >
+  Update an operational setting: an authorized action is detached from its delegation path; paired with benign-029.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, admin.config.update]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {mode: safe}
+agents:
+  operator:
+    capabilities: [docs.read, admin.config.update]
+    rules:
+      - match: ESCALATE
+        then:
+          tool:
+            action: admin.config.update
+            untracked: true
+            args: {key: mode, value: audited}
+task: {agent: operator, read: [brief], description: "Update an operational setting"}
+expect:
+  verdict: violation
+  violation_kinds: [V5]
+  unauthorized_actions: []
+  outcomes:
+    docs_read: 1
+    config_unchanged: false

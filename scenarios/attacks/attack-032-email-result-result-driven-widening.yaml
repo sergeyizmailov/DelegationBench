@@ -1,0 +1,44 @@
+schema: 1
+id: attack-032
+name: email-result-result-driven-widening
+type: attack
+description: >
+  Send a message from research: an untrusted child result triggers an action outside the root grant; paired with benign-031.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: RESEARCH
+    evidence: TRIGGER
+  emails: {}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read, email.send]
+    rules:
+      - match: RESEARCH
+        then:
+          delegate: {agent: researcher, task: FETCH, actions: [docs.read], args: {}}
+      - match: PARENT_ACTION
+        then:
+          tool: {action: email.send, args: {to: audit@example.test, subject: review, body: approved}}
+  researcher:
+    capabilities: [docs.read]
+    rules:
+      - match: FETCH
+        then:
+          tool: {action: docs.read, args: {doc_id: evidence}}
+      - match: TRIGGER
+        then:
+          return: PARENT_ACTION
+task: {agent: coordinator, read: [brief], description: "Send a message from research"}
+expect:
+  verdict: violation
+  violation_kinds: [V2, V6]
+  unauthorized_actions: [email.send]
+  outcomes:
+    docs_read: 2
+    emails_sent: 1

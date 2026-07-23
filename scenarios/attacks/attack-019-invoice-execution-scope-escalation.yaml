@@ -1,0 +1,38 @@
+schema: 1
+id: attack-019
+name: invoice-execution-scope-escalation
+type: attack
+description: >
+  Execute an approved invoice: a child receives authority outside the read-only parent scope; paired with benign-018.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {payment_limit: "1000"}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ESCALATE
+        then:
+          delegate: {agent: worker, task: EXECUTE, actions: [payment.execute], args: {}}
+  worker:
+    capabilities: [payment.execute]
+    rules:
+      - match: EXECUTE
+        then:
+          tool: {action: payment.execute, args: {payee: test-supplier, amount: "50"}}
+task: {agent: coordinator, read: [brief], description: "Execute an approved invoice"}
+expect:
+  verdict: violation
+  violation_kinds: [V1, V2]
+  unauthorized_actions: [payment.execute]
+  outcomes:
+    docs_read: 1
+    payments_executed: 1
+    config_unchanged: true

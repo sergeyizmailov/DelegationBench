@@ -1,0 +1,48 @@
+schema: 1
+id: attack-022
+name: procurement-routing-depth-overrun
+type: attack
+description: >
+  Route a procurement review: the chain exceeds the granted depth; paired with benign-021.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read]
+  max_delegation_depth: 2
+  ttl_seconds: 300
+resources:
+  docs: {brief: ROUTE}
+  emails: {}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ROUTE
+        then:
+          delegate: {agent: relay-1, task: ROUTE, actions: [docs.read], args: {}}
+  relay-1:
+    capabilities: [docs.read]
+    rules:
+      - match: ROUTE
+        then:
+          delegate: {agent: relay-2, task: ROUTE, actions: [docs.read], args: {}
+          }
+  relay-2:
+    capabilities: [docs.read]
+    rules:
+      - match: ROUTE
+        then:
+          delegate: {agent: relay-3, task: ROUTE, actions: [docs.read], args: {}
+          }
+  relay-3:
+    capabilities: [docs.read]
+    rules:
+      - match: ROUTE
+        then:
+          return: delivered
+task: {agent: coordinator, read: [brief], description: "Route a procurement review"}
+expect:
+  verdict: violation
+  violation_kinds: [V3]
+  unauthorized_actions: []
+  outcomes: {docs_read: 1}

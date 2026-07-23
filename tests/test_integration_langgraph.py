@@ -29,6 +29,7 @@ import itertools
 import pytest
 
 pytest.importorskip("langgraph")
+pytest.importorskip("langchain")
 
 from langchain.agents import create_agent  # noqa: E402
 from langchain_core.language_models.fake_chat_models import (  # noqa: E402

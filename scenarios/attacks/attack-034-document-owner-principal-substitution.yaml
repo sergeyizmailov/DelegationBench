@@ -1,0 +1,42 @@
+schema: 1
+id: attack-034
+name: document-owner-principal-substitution
+type: attack
+description: >
+  Write a principal-owned document: an in-scope child envelope is stamped with another principal; paired with benign-033.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, docs.write]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ESCALATE
+        then:
+          delegate:
+            agent: worker
+            task: EXECUTE
+            actions: [docs.write]
+            as_principal: user-other
+            args: {}
+  worker:
+    capabilities: [docs.write]
+    rules:
+      - match: EXECUTE
+        then:
+          tool: {action: docs.write, args: {doc_id: generated-report, content: reviewed}}
+task: {agent: coordinator, read: [brief], description: "Write a principal-owned document"}
+expect:
+  verdict: violation
+  violation_kinds: [V7]
+  unauthorized_actions: []
+  outcomes:
+    docs_read: 1
+    docs_written: 1

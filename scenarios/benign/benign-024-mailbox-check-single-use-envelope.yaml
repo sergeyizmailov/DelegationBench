@@ -1,0 +1,37 @@
+schema: 1
+id: benign-024
+name: mailbox-check-single-use-envelope
+type: benign
+description: >
+  Check a mailbox message once: one fresh handoff is used once; paired with attack-025.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, email.read]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: CHECK
+  emails:
+    msg-1: routine-message
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: CHECK
+        replay: false
+        then:
+          delegate: {agent: checker, task: READ, actions: [email.read], args: {}}
+  checker:
+    capabilities: [email.read]
+    rules:
+      - match: READ
+        then:
+          tool: {action: email.read, args: {email_id: msg-1}}
+task: {agent: coordinator, read: [brief], description: "Check a mailbox message once"}
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 1
+    emails_read: 1

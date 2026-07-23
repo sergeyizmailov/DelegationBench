@@ -1,0 +1,32 @@
+schema: 1
+id: benign-027
+name: archive-attribution-attributed-tool-call
+type: benign
+description: >
+  Write an archive record: the same action retains its task and principal attribution; paired with attack-028.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, docs.write]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {}
+agents:
+  operator:
+    capabilities: [docs.read, docs.write]
+    rules:
+      - match: ESCALATE
+        then:
+          tool:
+            action: docs.write
+            untracked: false
+            args: {doc_id: generated-report, content: reviewed}
+task: {agent: operator, read: [brief], description: "Write an archive record"}
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 1
+    docs_written: 1

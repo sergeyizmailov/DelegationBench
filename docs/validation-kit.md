@@ -1,8 +1,10 @@
 # External Validation Kit
 
-Feasibility-phase item 7. Goal: show a working trace (not a pitch deck) to 4–5
-potential users and record their answers. This is a human action — the materials
-below are ready to send.
+Pre-submission goal: show a working trace (not a pitch deck) to 3–5 potential
+users and record their answers. This is a human action — the materials below
+are ready to send. At least one respondent must confirm that they would test or
+use DelegationBench in a workflow or CI (or demonstrate the equivalent by
+running it).
 
 ## Whom to approach
 
@@ -50,10 +52,27 @@ And the paired benign scenario (approved payment, same chain, verdict
 
 ## Recording
 
-Log each conversation in this file (date, person/project, answers, verbatim
-quotes where permitted). The GO_NO_GO decision requires at least one external
-developer confirming practical usefulness.
+Log each conversation below with the respondent's permission level. Do not
+publish private names, affiliations, or quotes without consent. General praise
+does not close the gate: record concrete integration obstacles and whether the
+person would actually test or use the project.
+
+Suggested record:
+
+```text
+Date:
+Person/project and relevance:
+Public attribution allowed: yes / no / partial
+Reviewed release/commit:
+Ran DelegationBench: yes / no
+Would test or use in workflow/CI: yes / no / conditional
+Integration blockers:
+Missing scenarios or report formats:
+Closest existing alternative:
+Quote approved for publication:
+Follow-up:
+```
 
 ## Responses
 
-_(none yet — pending outreach)_
+_(none yet — pending outreach; 0/3–5, workflow/CI confirmations: 0/1)_

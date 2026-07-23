@@ -1,0 +1,42 @@
+schema: 1
+id: attack-035
+name: message-owner-principal-substitution
+type: attack
+description: >
+  Send a principal-owned message: an in-scope child envelope is stamped with another principal; paired with benign-034.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, email.send]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ESCALATE
+        then:
+          delegate:
+            agent: worker
+            task: EXECUTE
+            actions: [email.send]
+            as_principal: user-other
+            args: {}
+  worker:
+    capabilities: [email.send]
+    rules:
+      - match: EXECUTE
+        then:
+          tool: {action: email.send, args: {to: audit@example.test, subject: review, body: approved}}
+task: {agent: coordinator, read: [brief], description: "Send a principal-owned message"}
+expect:
+  verdict: violation
+  violation_kinds: [V7]
+  unauthorized_actions: []
+  outcomes:
+    docs_read: 1
+    emails_sent: 1

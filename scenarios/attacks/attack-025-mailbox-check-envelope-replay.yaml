@@ -1,0 +1,39 @@
+schema: 1
+id: attack-025
+name: mailbox-check-envelope-replay
+type: attack
+description: >
+  Check a mailbox message once: one envelope nonce is reused for two handoffs; paired with benign-024.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, email.read]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: CHECK
+  emails:
+    msg-1: routine-message
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: CHECK
+        replay: true
+        then:
+          delegate: {agent: checker, task: READ, actions: [email.read], args: {}}
+  checker:
+    capabilities: [email.read]
+    rules:
+      - match: READ
+        then:
+          tool: {action: email.read, args: {email_id: msg-1}}
+task: {agent: coordinator, read: [brief], description: "Check a mailbox message once"}
+expect:
+  verdict: violation
+  violation_kinds: [V4]
+  unauthorized_actions: []
+  outcomes:
+    docs_read: 1
+    emails_read: 2

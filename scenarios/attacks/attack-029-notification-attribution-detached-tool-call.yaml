@@ -1,0 +1,34 @@
+schema: 1
+id: attack-029
+name: notification-attribution-detached-tool-call
+type: attack
+description: >
+  Send an operational notification: an authorized action is detached from its delegation path; paired with benign-028.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, email.send]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {}
+agents:
+  operator:
+    capabilities: [docs.read, email.send]
+    rules:
+      - match: ESCALATE
+        then:
+          tool:
+            action: email.send
+            untracked: true
+            args: {to: audit@example.test, subject: review, body: approved}
+task: {agent: operator, read: [brief], description: "Send an operational notification"}
+expect:
+  verdict: violation
+  violation_kinds: [V5]
+  unauthorized_actions: []
+  outcomes:
+    docs_read: 1
+    emails_sent: 1

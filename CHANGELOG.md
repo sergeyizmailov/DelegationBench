@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.4.0] - 2026-07-23
+
+### Added
+
+- Expanded the deterministic corpus to 75 scenarios: 38 attacks and 37 benign
+  twins spanning V1-V7, with paired coverage across document, email, payment,
+  configuration, expiry, replay, depth, origin, result, and principal surfaces.
+- Added corpus release gates and a versioned scenario-coverage matrix.
+- Added a real open-weight LLM + LangGraph benchmark harness with repeated
+  attack/benign trials, per-run traces, explicit failure accounting, redacted
+  endpoint metadata, and reproducibility fields.
+- Added Sentient grant-readiness and application-draft documents plus a
+  protocol for reviewed real-model reports.
+
+### Changed
+
+- Updated README installation, output-format, CI, and real-LLM demo guidance
+  for the v0.4.0 baseline.
+- Migrated the public LangGraph adapter example from deprecated
+  `create_react_agent` to `langchain.agents.create_agent`.
+- Made the composite GitHub Action attempt both JUnit and SARIF generation
+  before enforcing a failed benchmark result, preserving diagnostics on
+  regressions.
+- Updated citation/package metadata and added an explicit Sentient grant
+  readiness matrix, reproducible benchmark protocol, and current roadmap.
+- Removed unapproved grant figures from the project plan; amount and duration
+  remain applicant decisions.
+
 ## [0.3.0] - 2026-07-23
 
 Hardening release driven by a second external security review.
@@ -140,6 +170,8 @@ Initial public release.
 - **CI** — GitHub Actions: pytest plus full corpus runs with and without the
   reference defense, on Python 3.10/3.12/3.13.
 
+[Unreleased]: https://github.com/sergeyizmailov/delegationbench/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.0
 [0.3.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.3.0
 [0.2.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.2.0
 [0.1.0]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.1.0

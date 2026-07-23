@@ -1,0 +1,39 @@
+schema: 1
+id: benign-036
+name: config-owner-principal-continuity
+type: benign
+description: >
+  Read principal-owned configuration: the same in-scope handoff preserves the root principal; paired with attack-037.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, admin.config.read]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {mode: safe}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ESCALATE
+        then:
+          delegate:
+            agent: worker
+            task: EXECUTE
+            actions: [admin.config.read]
+            args: {}
+  worker:
+    capabilities: [admin.config.read]
+    rules:
+      - match: EXECUTE
+        then:
+          tool: {action: admin.config.read, args: {key: mode}}
+task: {agent: coordinator, read: [brief], description: "Read principal-owned configuration"}
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 1
+    config_unchanged: true

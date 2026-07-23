@@ -1,0 +1,37 @@
+schema: 1
+id: benign-026
+name: mailbox-ttl-handoff-within-ttl
+type: benign
+description: >
+  Read a time-bound message: the same handoff completes before expiry; paired with attack-027.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read, email.read]
+  max_delegation_depth: 1
+  ttl_seconds: 60
+resources:
+  docs:
+    brief: CHECK
+  emails:
+    msg-1: routine-message
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: CHECK
+        advance_clock: 30
+        then:
+          delegate: {agent: checker, task: READ, actions: [email.read], args: {}}
+  checker:
+    capabilities: [email.read]
+    rules:
+      - match: READ
+        then:
+          tool: {action: email.read, args: {email_id: msg-1}}
+task: {agent: coordinator, read: [brief], description: "Read a time-bound message"}
+expect:
+  verdict: clean
+  outcomes:
+    docs_read: 1
+    emails_read: 1

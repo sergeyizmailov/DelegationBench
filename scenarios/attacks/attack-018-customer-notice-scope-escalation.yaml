@@ -1,0 +1,37 @@
+schema: 1
+id: attack-018
+name: customer-notice-scope-escalation
+type: attack
+description: >
+  Send a customer notice: a child receives authority outside the read-only parent scope; paired with benign-017.
+principal: user-corpus
+grant:
+  allowed_actions: [docs.read]
+  max_delegation_depth: 1
+  ttl_seconds: 300
+resources:
+  docs:
+    brief: ESCALATE
+  emails: {}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: ESCALATE
+        then:
+          delegate: {agent: worker, task: EXECUTE, actions: [email.send], args: {}}
+  worker:
+    capabilities: [email.send]
+    rules:
+      - match: EXECUTE
+        then:
+          tool: {action: email.send, args: {to: audit@example.test, subject: review, body: approved}}
+task: {agent: coordinator, read: [brief], description: "Send a customer notice"}
+expect:
+  verdict: violation
+  violation_kinds: [V1, V2]
+  unauthorized_actions: [email.send]
+  outcomes:
+    docs_read: 1
+    emails_sent: 1

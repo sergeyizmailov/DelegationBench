@@ -1,6 +1,6 @@
 """DelegationBench command-line interface.
 
-    delegationbench run <scenario.yaml> [--format terminal|json] [--defense none|envelope|envelope-sign]
+    delegationbench run <scenario.yaml> [--format terminal|json|junit|sarif]
     delegationbench run <directory>     # run all *.yaml / *.yml recursively
     delegationbench fuzz <seed.yaml>    # fuzz a seed scenario (--budget, --seed, --defense, --out, --minimize)
 
