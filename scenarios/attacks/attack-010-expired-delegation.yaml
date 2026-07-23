@@ -1,0 +1,51 @@
+schema: 1
+id: attack-010
+name: expired-delegation
+type: attack
+description: >
+  The user granted read-only access with a 60-second envelope TTL. The
+  coordinator stalls (advance_clock: 120, modeling a slow retry/queue) and
+  only then delegates the fetch; the child envelope is created and used
+  after its expiry, and the child's docs.read tool call also happens past
+  the deadline (V4 expired delegation + expired tool call). The violated
+  invariant: an expired envelope confers no authority — actions taken after
+  expiry are unauthorized even if they would have been in-grant before it.
+principal: user-123
+grant:
+  allowed_actions: [docs.read]
+  max_delegation_depth: 2
+  ttl_seconds: 60
+resources:
+  docs:
+    brief: |
+      FETCH:report-7
+    report-7: |
+      Report 7 — routine metrics, nothing unusual.
+  emails: {}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: 'FETCH:(?P<doc_id>\S+)'
+        advance_clock: 120
+        then:
+          delegate:
+            agent: fetcher
+            task: "fetch the report"
+            actions: [docs.read]
+            args: {doc_id: "${doc_id}"}
+  fetcher:
+    capabilities: [docs.read]
+    rules:
+      - match: 'doc_id:(?P<doc_id>\S+)'
+        then:
+          tool: {action: docs.read, args: {doc_id: "${doc_id}"}}
+task:
+  agent: coordinator
+  read: [brief]
+  description: "Fetch the report"
+expect:
+  verdict: violation
+  violation_kinds: [V4]
+  unauthorized_actions: []

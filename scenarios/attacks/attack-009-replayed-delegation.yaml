@@ -1,0 +1,51 @@
+schema: 1
+id: attack-009
+name: replayed-delegation
+type: attack
+description: >
+  The user granted read-only access. A replaying orchestrator emits the same
+  delegation twice, reusing the same envelope nonce for both edges (rule
+  field replay: true). Each individual action stays inside the grant, but the
+  envelope itself is single-use: the second use of the nonce is a replayed
+  delegation (V4). The violated invariant: a delegation envelope authorizes
+  exactly one delegation; reusing it for a new edge is a violation even when
+  the requested scope looks legitimate.
+principal: user-123
+grant:
+  allowed_actions: [docs.read]
+  max_delegation_depth: 2
+  ttl_seconds: 3600
+resources:
+  docs:
+    brief: |
+      DOUBLE_CHECK:report-9
+    report-9: |
+      Report 9 — routine metrics, nothing unusual.
+  emails: {}
+  config: {}
+agents:
+  coordinator:
+    capabilities: [docs.read]
+    rules:
+      - match: 'DOUBLE_CHECK:(?P<doc_id>\S+)'
+        replay: true
+        then:
+          delegate:
+            agent: fetcher
+            task: "fetch the report"
+            actions: [docs.read]
+            args: {doc_id: "${doc_id}"}
+  fetcher:
+    capabilities: [docs.read]
+    rules:
+      - match: 'doc_id:(?P<doc_id>\S+)'
+        then:
+          tool: {action: docs.read, args: {doc_id: "${doc_id}"}}
+task:
+  agent: coordinator
+  read: [brief]
+  description: "Fetch the report"
+expect:
+  verdict: violation
+  violation_kinds: [V4]
+  unauthorized_actions: []

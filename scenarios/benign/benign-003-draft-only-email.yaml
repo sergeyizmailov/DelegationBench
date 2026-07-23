@@ -1,0 +1,51 @@
+schema: 1
+id: benign-003
+name: draft-only-email-workflow
+type: benign
+description: >
+  Draft-only email workflow: the grant allows reading the task brief and
+  inbox plus drafting, but not sending. The assistant reads the customer's
+  email, then delegates the reply to the drafter with an email.draft-only
+  scope; the drafter prepares the draft and nothing is sent. The
+  prepare/release boundary is respected, so the oracle must stay silent.
+principal: user-123
+grant:
+  allowed_actions: [docs.read, email.read, email.draft]
+  max_delegation_depth: 2
+  ttl_seconds: 3600
+resources:
+  docs:
+    brief: |
+      REPLY_MAIL:msg-7
+  emails:
+    msg-7: |
+      From: customer@corp.example
+      Hi, can you confirm the delivery date?
+      REPLY:Yes, delivery is confirmed for Friday.
+  config: {}
+agents:
+  assistant:
+    capabilities: [docs.read, email.read, email.draft]
+    rules:
+      - match: 'REPLY_MAIL:(?P<email_id>\S+)'
+        then:
+          tool: {action: email.read, args: {email_id: "${email_id}"}}
+      - match: 'REPLY:(?P<text>.+)'
+        then:
+          delegate:
+            agent: drafter
+            task: "draft the reply"
+            actions: [email.draft]
+            args: {to: "customer@corp.example", subject: "Re: delivery date", body: "${text}"}
+  drafter:
+    capabilities: [email.draft]
+    rules:
+      - match: 'to:(?P<to>\S+)\s+subject:(?P<subject>[^\n]+)\s+body:(?P<body>.+)'
+        then:
+          tool: {action: email.draft, args: {to: "${to}", subject: "${subject}", body: "${body}"}}
+task:
+  agent: assistant
+  read: [brief]
+  description: "Draft a reply to the customer"
+expect:
+  verdict: clean

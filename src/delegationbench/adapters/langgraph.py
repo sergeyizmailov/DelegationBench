@@ -1,0 +1,240 @@
+"""LangGraph adapter for DelegationBench.
+
+Observes a compiled LangGraph graph through the LangChain callback
+machinery and emits the neutral events defined in
+:mod:`delegationbench.adapters`, which :func:`build_trace` then maps
+into a :class:`~delegationbench.trace.Trace` for the oracle.
+
+Usage (no framework or application source changes — attach at invoke
+time)::
+
+    from delegationbench.adapters.langgraph import (
+        DelegationBenchCallback, build_trace, run_oracle)
+
+    handler = DelegationBenchCallback(agents={"reader", "payment"})
+    result = await graph.ainvoke(
+        inputs,
+        config={
+            "callbacks": [handler],
+            "configurable": {"thread_id": "t-1"},
+            # Principal carrier: LangGraph has no built-in user identity,
+            # so the harness MUST inject it here. config["metadata"]
+            # propagates to every child run's callback metadata.
+            "metadata": {"principal": "user-123"},
+        },
+    )
+    grant = {"allowed_actions": ["docs.read"], "max_delegation_depth": 2,
+             "principal": "user-123"}
+    trace = build_trace(handler.events, grant)
+    verdict = run_oracle(trace, grant)
+
+The harness also owns the root grant: the adapter maps the first
+ancestral agent run into the root delegation holding
+``grant["allowed_actions"]``; everything below it is reconstructed from
+the run hierarchy.
+
+Event mapping
+-------------
+- ``on_chain_start`` with ``metadata["langgraph_node"]`` -> ``agent_start``
+  (``metadata["checkpoint_ns"]`` marks subgraph namespaces but is not
+  needed for the tree; ``parent_run_id`` chains suffice).
+- ``on_tool_start`` -> ``tool_call``, or ``delegation`` when the tool is
+  a handoff: name starts with ``transfer_to_``/``delegate_to_``
+  (langgraph-supervisor default, docs convention), or the destination is
+  stamped under ``__handoff_destination`` in tool/run metadata
+  (langgraph-supervisor's ``METADATA_KEY_HANDOFF_DESTINATION``).
+- ``on_tool_end`` / ``on_tool_error`` -> ``tool_result`` (``ok``
+  true/false). Handoff tool results carry no action and are dropped by
+  ``build_trace``.
+- Agent identity for a tool run = nearest ancestor run with a
+  ``langgraph_node``; principal = ``config["metadata"]["principal"]``
+  (or ``user_id``) seen on any run's metadata.
+
+Version context
+---------------
+Targets the LangGraph 1.x / langchain-core 1.x callback API
+(``AsyncCallbackHandler`` hook signatures stable since 2023; researched
+against langgraph 1.2.9 / langchain-core 1.5.0, 2026-07 — see
+``docs/research/langgraph-integration.md``). ``langgraph`` is an
+optional dependency: this module imports cleanly without it, and only
+subclasses ``langchain_core.callbacks.AsyncCallbackHandler`` when
+langchain_core is importable (otherwise it is duck-typed with identical
+async methods). Install with ``pip install 'delegationbench[langgraph]'``.
+
+Known gaps
+----------
+- ``tool_call_id`` is not passed to ``on_tool_start``
+  (langchain-ai/langchain#34168): correlation is by ``run_id`` only.
+- Handoff detection is naming/metadata-convention based. Custom
+  ``StateGraph`` graphs whose delegations are plain edges or
+  differently-named tools need ``handoff_prefixes``/``agents`` tuning
+  or per-scenario rules.
+- No principal identity exists in-framework; without harness-injected
+  ``config["metadata"]["principal"]`` the originating user is
+  unrecoverable from events.
+- Framework handoffs carry no task *scope*, so a child delegation's
+  scope defaults to the parent's authority: V1 (authority expansion on
+  handoff) cannot be observed unless the harness supplies ``scope`` in
+  the delegation event args out-of-band.
+- Async-only handler: attach to ``ainvoke``/``astream``. Synchronous
+  ``invoke`` would need a ``BaseCallbackHandler`` variant with the same
+  recording logic.
+"""
+
+from __future__ import annotations
+
+import time
+from typing import Any, Iterable
+
+from . import NeutralEvent, build_trace, run_oracle
+
+__all__ = ["DelegationBenchCallback", "NeutralEvent", "build_trace",
+           "run_oracle"]
+
+try:  # Real base class when langchain_core is installed.
+    from langchain_core.callbacks import (
+        AsyncCallbackHandler as _AsyncCallbackHandler)
+except Exception:  # langchain not installed: duck-typed stand-in.
+    _AsyncCallbackHandler = object
+
+
+class DelegationBenchCallback(_AsyncCallbackHandler):
+    """AsyncCallbackHandler that records neutral DelegationBench events.
+
+    Parameters
+    ----------
+    agents:
+        Node names to treat as agents. ``None`` (default) treats every
+        chain run carrying ``metadata["langgraph_node"]`` as an agent
+        run. Pass an explicit set to ignore infrastructure nodes
+        (routers, tool nodes) in larger graphs.
+    principal_keys:
+        Metadata keys probed, in order, for the originating-user id.
+        Default: ``("principal", "user_id")``.
+    handoff_prefixes:
+        Tool-name prefixes that mark a delegation handoff. Default:
+        ``("transfer_to_", "delegate_to_")``. The langgraph-supervisor
+        ``__handoff_destination`` metadata key is always honored.
+    """
+
+    HANDOFF_PREFIXES = ("transfer_to_", "delegate_to_")
+    HANDOFF_METADATA_KEY = "__handoff_destination"
+    PRINCIPAL_KEYS = ("principal", "user_id")
+
+    def __init__(self, agents: Iterable[str] | None = None,
+                 principal_keys: Iterable[str] | None = None,
+                 handoff_prefixes: Iterable[str] | None = None) -> None:
+        self.agents = set(agents) if agents is not None else None
+        self.principal_keys = tuple(principal_keys or self.PRINCIPAL_KEYS)
+        self.handoff_prefixes = tuple(handoff_prefixes
+                                      or self.HANDOFF_PREFIXES)
+        self.events: list[NeutralEvent] = []
+        self._agent_of_run: dict[str, str] = {}
+        self._parent_of_run: dict[str, str | None] = {}
+
+    # -- internal helpers ------------------------------------------------
+
+    def _record_run(self, run_id: Any, parent_run_id: Any) -> None:
+        self._parent_of_run[str(run_id)] = (
+            str(parent_run_id) if parent_run_id else None)
+
+    def _nearest_agent(self, run_id: Any) -> str | None:
+        rid = str(run_id) if run_id else None
+        seen: set[str] = set()
+        while rid is not None and rid not in seen:
+            seen.add(rid)
+            if rid in self._agent_of_run:
+                return rid
+            rid = self._parent_of_run.get(rid)
+        return None
+
+    def _principal(self, metadata: dict | None) -> Any:
+        for key in self.principal_keys:
+            if metadata and key in metadata:
+                return metadata[key]
+        return None
+
+    # -- callback hooks ---------------------------------------------------
+
+    async def on_chain_start(self, serialized: dict | None,
+                             inputs: Any, *, run_id: Any,
+                             parent_run_id: Any = None,
+                             tags: list[str] | None = None,
+                             metadata: dict | None = None,
+                             **kwargs: Any) -> None:
+        self._record_run(run_id, parent_run_id)
+        metadata = metadata or {}
+        node = metadata.get("langgraph_node")
+        if not node or (self.agents is not None and node not in self.agents):
+            return
+        rid = str(run_id)
+        self._agent_of_run[rid] = node
+        event: NeutralEvent = {
+            "type": "agent_start", "run_id": rid,
+            "parent_run_id": str(parent_run_id) if parent_run_id else None,
+            "agent": node, "ts": time.time(),
+        }
+        principal = self._principal(metadata)
+        if principal is not None:
+            event["principal"] = principal
+        self.events.append(event)
+
+    async def on_chain_end(self, outputs: Any, *, run_id: Any,
+                           **kwargs: Any) -> None:
+        rid = str(run_id)
+        if rid in self._agent_of_run:
+            self.events.append({"type": "agent_end", "run_id": rid,
+                                "agent": self._agent_of_run[rid],
+                                "ts": time.time()})
+
+    async def on_tool_start(self, serialized: dict | None, input_str: str,
+                            *, run_id: Any, parent_run_id: Any = None,
+                            tags: list[str] | None = None,
+                            metadata: dict | None = None,
+                            inputs: dict | None = None,
+                            **kwargs: Any) -> None:
+        self._record_run(run_id, parent_run_id)
+        metadata = metadata or {}
+        serialized = serialized or {}
+        name = serialized.get("name") or "?"
+        dest = (serialized.get("metadata") or {}).get(
+            self.HANDOFF_METADATA_KEY) or metadata.get(
+            self.HANDOFF_METADATA_KEY)
+        is_handoff = dest is not None or name.startswith(
+            self.handoff_prefixes)
+        rid = str(run_id)
+        parent = str(parent_run_id) if parent_run_id else None
+        from_run = self._nearest_agent(parent_run_id)
+        from_agent = (self._agent_of_run.get(from_run) if from_run
+                      else None)
+        if is_handoff:
+            if dest is None:
+                for prefix in self.handoff_prefixes:
+                    if name.startswith(prefix):
+                        dest = name[len(prefix):]
+                        break
+            self.events.append({
+                "type": "delegation", "run_id": rid,
+                "parent_run_id": parent, "from_agent": from_agent,
+                "to_agent": dest, "tool": name,
+                "args": dict(inputs or {}), "ts": time.time(),
+            })
+        else:
+            self.events.append({
+                "type": "tool_call", "run_id": rid, "parent_run_id": parent,
+                "agent": from_agent or metadata.get("langgraph_node"),
+                "tool": name, "args": dict(inputs or {}),
+                "ts": time.time(),
+            })
+
+    async def on_tool_end(self, output: Any, *, run_id: Any,
+                          **kwargs: Any) -> None:
+        self.events.append({"type": "tool_result", "run_id": str(run_id),
+                            "ok": True, "result": str(output)[:500],
+                            "ts": time.time()})
+
+    async def on_tool_error(self, error: BaseException, *, run_id: Any,
+                            **kwargs: Any) -> None:
+        self.events.append({"type": "tool_result", "run_id": str(run_id),
+                            "ok": False, "error": str(error),
+                            "ts": time.time()})

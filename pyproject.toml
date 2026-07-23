@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "delegationbench"
+version = "0.1.0"
+description = "Open crash tests for privilege escalation across AI-agent delegation chains"
+readme = "PROJECT_PLAN.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+# Optional framework adapter. Targets the LangGraph 1.x /
+# langchain-core 1.x callback API (docs/research/langgraph-integration.md).
+# Unpinned on purpose: gate upgrades on tests/test_langgraph_adapter.py.
+langgraph = ["langgraph"]
+
+[project.scripts]
+delegationbench = "delegationbench.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
