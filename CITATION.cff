@@ -4,8 +4,8 @@ type: software
 title: "DelegationBench: Open crash tests for privilege escalation across AI agent handoffs"
 version: 0.1.0
 date-released: 2026-07-23
-url: "https://github.com/sergeyizmailov/delegationbench"
-repository-code: "https://github.com/sergeyizmailov/delegationbench"
+url: "https://github.com/sergeyizmailov/DelegationBench"
+repository-code: "https://github.com/sergeyizmailov/DelegationBench"
 license: Apache-2.0
 authors:
   - name: "sergeyizmailov"

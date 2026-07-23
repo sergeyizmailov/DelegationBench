@@ -6,7 +6,7 @@ Please report security issues through GitHub's private vulnerability reporting:
 
 **Security → Advisories → Report a vulnerability**
 
-(<https://github.com/sergeyizmailov/delegationbench/security/advisories/new>)
+(<https://github.com/sergeyizmailov/DelegationBench/security/advisories/new>)
 
 Do not open a public issue for security problems.
 
