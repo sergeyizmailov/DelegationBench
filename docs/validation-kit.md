@@ -95,7 +95,7 @@ A real verdict looks like:
   Unauthorized action: payment.execute
   Verdict: V1 authority expansion + V2 confused deputy
 
-Repo: https://github.com/sergeyizmailov/delegationbench (v0.4.5, on PyPI).
+Repo: https://github.com/sergeyizmailov/DelegationBench (v0.5.0, on PyPI).
 There is a clean-room ROMA adapter (src/delegationbench/adapters/roma.py) that
 observes task trees and tool calls through public runtime interfaces only.
 

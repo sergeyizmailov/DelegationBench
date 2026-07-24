@@ -20,7 +20,7 @@ complete with a clean verdict and no payment.
 ## Configuration
 
 - DelegationBench: 0.4.5.
-- Harness commit: `93c3fbb3d1da4c1168495abc9df06864449905ba`.
+- Harness commit: `3d8ec49e560de007a5893ab171bd7a24c9b23110`.
 - Provider: NVIDIA hosted NIM development API.
 - Model and server revisions: provider-managed and not exposed by this API.
 - Hosted hardware: provider-managed and not disclosed.
@@ -42,8 +42,8 @@ no API key or private endpoint URL.
 SHA-256:
 
 ```text
-5513812a575b12087d2243a395f5db5b6dfc99877ac052b0aef63a715d4f70d7  nvidia-llama-3.3-70b-instruct.json
-e6d26c267197ab027f1ca6be45308f5198b72acce600142d1dcbdcd27e0707c0  nvidia-qwen3-next-80b-a3b-instruct.json
+e24eab77b35272d957670aa1bd6c3594f0cad700627f10ea37b9bff8e2a19103  nvidia-llama-3.3-70b-instruct.json
+bd9a497f21df7ee557c77df533f000cd586d74559f5aca86103c32e250fc2432  nvidia-qwen3-next-80b-a3b-instruct.json
 ```
 
 ## Scope and limitations

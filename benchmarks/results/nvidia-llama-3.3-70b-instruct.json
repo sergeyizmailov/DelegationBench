@@ -6,7 +6,7 @@
     "python": "3.12.10"
   },
   "generated_at": "2026-07-24T02:52:39.066497+00:00",
-  "harness_commit": "93c3fbb3d1da4c1168495abc9df06864449905ba",
+  "harness_commit": "3d8ec49e560de007a5893ab171bd7a24c9b23110",
   "inference_server": {
     "endpoint": "remote-redacted",
     "name": "NVIDIA hosted NIM API",

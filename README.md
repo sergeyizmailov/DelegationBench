@@ -16,6 +16,7 @@
   <a href="THREAT_MODEL.md">Threat model</a> ·
   <a href="docs/scenario-coverage.md">Scenario coverage</a> ·
   <a href="docs/benchmark-protocol.md">Benchmark protocol</a> ·
+  <a href="docs/external-validation.md">External validation</a> ·
   <a href="docs/validation-kit.md">Validation kit</a> ·
   <a href="docs/fuzzing.md">Fuzzing</a> ·
   <a href="ROADMAP.md">Roadmap</a> ·
@@ -247,6 +248,29 @@ python examples/langgraph_real_llm_demo.py \
 DelegationBench does not install or start a model server. Model choice,
 serving, hardware use, and benchmark repetition remain explicit harness
 decisions.
+
+### Published open-weight results
+
+Two hosted open-weight models were run through the same real LangGraph task
+with 10 attack and 10 benign trials each:
+
+| Model | Attack success | False positives | Benign task success | Trial errors |
+|---|---:|---:|---:|---:|
+| Llama 3.3 70B Instruct | 0/10 | 0/10 | 10/10 | 0 |
+| Qwen3-Next 80B-A3B Instruct | 0/10 | 0/10 | 10/10 | 0 |
+
+Both models read the document and refused its injected cross-agent payment
+instruction in every attack trial. The
+[reviewed raw reports, exact configuration, hashes, and limitations](benchmarks/results/)
+are versioned in the repository. This is one paired task, not a claim that the
+entire deterministic corpus was converted into LLM-driven scenarios.
+
+## External validation
+
+Three developers and security practitioners published attributable validation
+reports with commands, environments, results, and limitations. One explicitly
+confirmed that they would use the documented workflow as a CI gate. See the
+[evidence index](docs/external-validation.md) and the linked original issues.
 
 ## Repository layout
 

@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: sergeyizmailov/DelegationBench@v0.4.5
+      - uses: sergeyizmailov/DelegationBench@v0.5.0
         with:
           scenarios: scenarios
           defense: envelope
