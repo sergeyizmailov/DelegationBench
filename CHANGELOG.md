@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Continuous fuzzing with ClusterFuzzLite/Atheris: four coverage-guided
+  targets (`fuzz/`) for scenario loading, authority envelopes, trace
+  construction, and oracle evaluation, with seed corpora built from real
+  scenarios and execution traces. Crash reproducers are preserved as CI
+  artifacts; see `docs/fuzzing.md`.
+- Hash-locked CI dependencies (`.github/requirements-ci.txt`,
+  `.github/requirements-integration.txt`) installed with
+  `pip install --require-hashes`; Dependabot now also tracks those files and
+  the pinned ClusterFuzzLite base image.
+
+### Security
+
+- Fixed an oracle denial-of-service found by the new fuzzer: a trace in
+  which a task is its own parent (corrupted or attacker-controlled input)
+  sent verdict path reconstruction into an unbounded loop until memory was
+  exhausted. The walk now terminates on cycles, with a regression test and
+  the fuzz-found input kept as a seed.
+- Release workflow now produces SLSA v1 provenance with the official SLSA
+  GitHub generator (pinned by commit SHA) and attaches
+  `delegationbench.intoto.jsonl` to the release, alongside the existing
+  GitHub artifact attestation and SPDX SBOM. Release jobs are split so that
+  build, asset upload, and provenance signing each run with the minimal
+  token scopes.
+- All GitHub Actions in every workflow are pinned to full commit SHAs.
+- Workflow tokens are least-privilege everywhere: top-level permissions are
+  read-only and write scopes are granted per job only where required
+  (release asset upload, SARIF upload, OIDC signing).
+- Fixed the OpenSSF Scorecard badge/viewer URL to use the canonical
+  repository casing (`sergeyizmailov/DelegationBench`).
+
 ## [0.4.5] - 2026-07-24
 
 External CI validation found two contract defects that the project's own

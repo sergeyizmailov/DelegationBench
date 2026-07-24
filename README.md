@@ -8,7 +8,7 @@
   <a href="https://pypi.org/project/delegationbench/"><img src="https://img.shields.io/pypi/v/delegationbench" alt="PyPI"></a>
   <a href="https://github.com/sergeyizmailov/DelegationBench/releases/latest"><img src="https://img.shields.io/github/v/release/sergeyizmailov/DelegationBench" alt="Latest release"></a>
   <a href="https://github.com/sergeyizmailov/DelegationBench/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
-  <a href="https://securityscorecards.dev/viewer/?uri=github.com/sergeyizmailov/delegationbench"><img src="https://api.securityscorecards.dev/projects/github.com/sergeyizmailov/delegationbench/badge" alt="OpenSSF Scorecard"></a>
+  <a href="https://securityscorecards.dev/viewer/?uri=github.com/sergeyizmailov/DelegationBench"><img src="https://api.securityscorecards.dev/projects/github.com/sergeyizmailov/DelegationBench/badge" alt="OpenSSF Scorecard"></a>
 </p>
 
 <p align="center">
@@ -17,6 +17,7 @@
   <a href="docs/scenario-coverage.md">Scenario coverage</a> ·
   <a href="docs/benchmark-protocol.md">Benchmark protocol</a> ·
   <a href="docs/validation-kit.md">Validation kit</a> ·
+  <a href="docs/fuzzing.md">Fuzzing</a> ·
   <a href="ROADMAP.md">Roadmap</a> ·
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
@@ -254,6 +255,7 @@ src/delegationbench/   # package: scenario, runner, oracle, defense, fuzzer, rep
 src/delegationbench/scenarios/attacks/  # 38 attack scenarios (bundled as package data)
 src/delegationbench/scenarios/benign/   # 37 benign twins
 tests/                 # pytest suite
+fuzz/                  # Atheris targets + seed corpora (ClusterFuzzLite in CI)
 experiments/           # original minimal proof-of-concept (kept for reference)
 docs/research/         # competitive landscape, ROMA/LangGraph integration audits
 benchmarks/             # protocol and reviewed real-model result artifacts
@@ -278,8 +280,10 @@ delegationbench run scenarios/ --defense envelope
 
 Contributions welcome — new attack scenarios are the best first contribution.
 See [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), and the
-[threat model](THREAT_MODEL.md). Security issues: [SECURITY.md](SECURITY.md)
-(private reporting, please). For questions, use [GitHub
+[threat model](THREAT_MODEL.md). The parser, envelopes, traces, and oracle are
+fuzzed continuously with ClusterFuzzLite — see
+[docs/fuzzing.md](docs/fuzzing.md). Security issues:
+[SECURITY.md](SECURITY.md) (private reporting, please). For questions, use [GitHub
 Discussions](https://github.com/sergeyizmailov/DelegationBench/discussions) or
 see [SUPPORT.md](SUPPORT.md). If you use DelegationBench in research, see
 [CITATION.cff](CITATION.cff).
