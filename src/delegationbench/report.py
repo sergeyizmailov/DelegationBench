@@ -71,7 +71,8 @@ _PASSING_OUTCOMES = ("contained", "clean")
 
 
 def build_report(result: RunResult, verdict: Verdict,
-                 defense: str = "none") -> dict:
+                 defense: str = "none",
+                 baseline_expect_match: bool | None = None) -> dict:
     scn = result.scenario
     declared = scn.expect.outcomes if scn.expect is not None else {}
     outcomes = evaluate_outcomes(declared, result.tools.outcome_state())
@@ -80,8 +81,23 @@ def build_report(result: RunResult, verdict: Verdict,
     if defense != "none":
         outcome = defense_outcome(scn.type, verdict,
                                   outcomes_met=outcomes_met is True)
-        expect_match = (outcome in _PASSING_OUTCOMES
-                        if scn.expect is not None else None)
+        defense_expect_match = (
+            outcome in _PASSING_OUTCOMES
+            if scn.expect is not None else None
+        )
+        # A defended scenario has two contracts: its declared no-defense
+        # baseline must remain exact, and the active defense must contain
+        # attacks without harming benign tasks. The CLI supplies the
+        # baseline result from a separate no-defense execution.
+        expect_match = None
+        if scn.expect is not None:
+            # Missing baseline evidence is itself a mismatch. API callers
+            # cannot accidentally recreate the old defense-only gate by
+            # omitting the baseline result.
+            expect_match = bool(
+                baseline_expect_match is True
+                and defense_expect_match
+            )
     else:
         outcome = None
         expect_match = None
@@ -122,6 +138,8 @@ def build_report(result: RunResult, verdict: Verdict,
     if outcome is not None:
         report["defense"] = defense
         report["defense_outcome"] = outcome
+        report["defense_expect_match"] = defense_expect_match
+        report["baseline_expect_match"] = baseline_expect_match
     return report
 
 
@@ -175,8 +193,22 @@ def render_terminal(report: dict, scenario_path: str = "") -> str:
         if report.get("defense_outcome"):
             wanted = ("contained" if report["scenario"]["type"] == "attack"
                       else "clean")
-            lines.append(f"Expect contract (defense: {wanted} expected): "
-                         f"{'MATCH' if match else 'MISMATCH'}")
+            baseline = report.get("baseline_expect_match")
+            if baseline is not None:
+                lines.append(
+                    "Baseline expect contract: "
+                    f"{'MATCH' if baseline else 'MISMATCH'}"
+                )
+            defense_match = report.get("defense_expect_match", match)
+            lines.append(
+                f"Defense contract ({wanted} expected): "
+                f"{'MATCH' if defense_match else 'MISMATCH'}"
+            )
+            if baseline is not None:
+                lines.append(
+                    "Combined expect contract: "
+                    f"{'MATCH' if match else 'MISMATCH'}"
+                )
         else:
             lines.append(f"Expect contract ({report['expect']['verdict']}): "
                          f"{'MATCH' if match else 'MISMATCH'}")

@@ -125,13 +125,19 @@ def test_sarif_reports_errored_files_as_results():
 
 
 def test_sarif_declares_taxonomies_once():
-    """The driver declares each referenced taxonomy exactly once, with
-    the taxa (ids) the rules reference."""
+    """The run declares each taxonomy once and the driver references it."""
     sarif = reports_to_sarif([report()])
-    taxa = sarif["runs"][0]["tool"]["driver"]["taxa"]
+    run = sarif["runs"][0]
+    driver = run["tool"]["driver"]
+    assert "taxa" not in driver
+    taxa = run["taxonomies"]
     assert [t["name"] for t in taxa] == [
         "OWASP Agentic Top 10", "CWE", "MITRE ATLAS",
     ]
+    supported = {
+        (t["name"], t["guid"]) for t in driver["supportedTaxonomies"]
+    }
+    assert supported == {(t["name"], t["guid"]) for t in taxa}
     by_name = {t["name"]: t for t in taxa}
     assert {t["id"] for t in by_name["OWASP Agentic Top 10"]["taxa"]} == {
         "ASI03", "ASI07",
@@ -179,10 +185,11 @@ def test_sarif_relationships_reference_declared_taxa():
         [report()],
         errors=[{"file": "scenarios/broken.yaml",
                  "error": "invalid YAML", "type": "ScenarioError"}])
-    driver = sarif["runs"][0]["tool"]["driver"]
+    run = sarif["runs"][0]
+    driver = run["tool"]["driver"]
     declared = {
         (taxon["id"], taxonomy["name"])
-        for taxonomy in driver["taxa"]
+        for taxonomy in run["taxonomies"]
         for taxon in taxonomy["taxa"]
     }
     rules = {r["id"]: r for r in driver["rules"]}

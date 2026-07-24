@@ -378,8 +378,10 @@ def test_new_benign_scenarios_clean_with_outcomes(path):
 
 
 @pytest.mark.parametrize("defense", ["envelope", "envelope-sign"])
-def test_new_benign_scenarios_pass_with_defense(defense, capsys):
+def test_new_benign_scenarios_pass_with_defense(defense, monkeypatch, capsys):
     from delegationbench.cli import main
+    if defense == "envelope-sign":
+        monkeypatch.setenv("DELEGATIONBENCH_KEY", "test-signing-key")
     for path in NEW_BENIGN:
         assert main(["run", str(path), "--defense", defense]) == 0, \
             (path, capsys.readouterr().out)

@@ -7,14 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-07-24
+
+External CI validation found two contract defects that the project's own
+checks did not cover. This patch release closes both and makes signed-envelope
+configuration fail closed.
+
+### Security
+
+- `--defense envelope-sign` now exits with a configuration error when
+  `DELEGATIONBENCH_KEY` is unset or empty. The CLI no longer signs with the
+  public fixed test key implicitly; `DEFAULT_SIGNING_KEY` remains available
+  only for explicit unit-test use.
+- Defense-mode CI gating now checks both contracts: a separate no-defense run
+  must match the scenario's exact declared baseline, and the defended run must
+  contain attacks without overblocking or leaving benign outcomes incomplete.
+  A defense can no longer hide a corrupted `expect.verdict`,
+  `violation_kinds`, or `unauthorized_actions` baseline.
+
 ### Added
 
 - Added tokenless PyPI Trusted Publishing automation and a release runbook.
+- Added a dedicated SARIF CI job that validates output against the official
+  pinned OASIS SARIF 2.1.0 schema on pull requests and uploads it to GitHub
+  code scanning on `main`.
 
 ### Fixed
 
 - Pinned the OpenSSF Scorecard workflow to a valid release commit and granted
   the analysis job the minimum repository-read permission it requires.
+- Moved full OWASP, CWE, and MITRE ATLAS taxonomy components from the invalid
+  `tool.driver.taxa` location to `run.taxonomies`; the driver now declares
+  `supportedTaxonomies`. `github/codeql-action/upload-sarif@v4` accepts the
+  resulting schema-valid report.
+- Updated CI and report documentation to describe the two-part baseline plus
+  defense contract and the required signing key.
 
 ## [0.4.4] - 2026-07-23
 
@@ -260,7 +287,8 @@ Initial public release.
 - **CI** — GitHub Actions: pytest plus full corpus runs with and without the
   reference defense, on Python 3.10/3.12/3.13.
 
-[Unreleased]: https://github.com/sergeyizmailov/delegationbench/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/sergeyizmailov/delegationbench/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.5
 [0.4.4]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.4
 [0.4.3]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.3
 [0.4.2]: https://github.com/sergeyizmailov/delegationbench/releases/tag/v0.4.2

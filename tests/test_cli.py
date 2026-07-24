@@ -88,6 +88,20 @@ def test_expect_mismatch_exit_1(tmp_path, capsys):
     assert "MISMATCH" in capsys.readouterr().out
 
 
+def test_defense_does_not_hide_tampered_baseline_expect(tmp_path, capsys):
+    """A defense pass must not mask a corrupted no-defense contract."""
+    mismatched = tmp_path / "mismatch-under-defense.yaml"
+    mismatched.write_text(ATTACK.read_text().replace(
+        "expect:\n  verdict: violation",
+        "expect:\n  verdict: clean"))
+    assert main(["run", str(mismatched),
+                 "--defense", "envelope"]) == 1
+    out = capsys.readouterr().out
+    assert "Baseline expect contract: MISMATCH" in out
+    assert "Defense contract (contained expected): MATCH" in out
+    assert "Combined expect contract: MISMATCH" in out
+
+
 def test_directory_json_format(capsys):
     n_scenarios = len(list(SCENARIOS_DIR.rglob("*.yaml")))
     assert main(["run", str(SCENARIOS_DIR), "--format", "json"]) == 0

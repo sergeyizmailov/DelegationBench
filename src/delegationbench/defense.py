@@ -70,17 +70,15 @@ adopted from that envelope on first sight, clamped to the bound grant.
 Signatures (``--defense envelope-sign``) use HMAC-SHA256 from the stdlib
 (``hmac``/``hashlib``) — no new dependencies. Ed25519 is the intended
 production upgrade: asymmetric signatures would let agents verify envelopes
-without sharing the signing key. The HMAC key
-comes from the ``DELEGATIONBENCH_KEY`` environment variable; when unset,
-``DEFAULT_SIGNING_KEY`` is used — an INSECURE fixed test key that exists
-only so benchmark runs stay reproducible, and selecting it emits a
-runtime warning. Never rely on the default outside tests.
+without sharing the signing key. The HMAC key comes from the
+``DELEGATIONBENCH_KEY`` environment variable. The CLI fails closed when
+the variable is unset or empty. ``DEFAULT_SIGNING_KEY`` exists only for
+explicit use by unit tests; the CLI never selects it implicitly.
 """
 
 from __future__ import annotations
 
 import os
-import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -91,28 +89,29 @@ if TYPE_CHECKING:
     from .clock import VirtualClock
     from .envelope import Envelope
 
-# INSECURE: fixed test key, used only when DELEGATIONBENCH_KEY is unset.
+# INSECURE: fixed test key for explicit use by unit tests only.
 DEFAULT_SIGNING_KEY = b"delegationbench-insecure-default-key"
 
 # Task id the runner assigns to the root envelope (runner.run_scenario).
 ROOT_TASK_ID = "root"
 
 
+class SigningKeyError(ValueError):
+    """Raised when signed-envelope mode has no configured HMAC key."""
+
+
 def signing_key_from_env(env_var: str = "DELEGATIONBENCH_KEY") -> bytes:
     """HMAC key for ``--defense envelope-sign``.
 
-    Falls back to the INSECURE fixed test key when the variable is unset
-    or empty, and warns: the default exists only so benchmark runs stay
-    reproducible.
+    Fail closed when the variable is unset or empty. Tests that need a
+    deterministic key pass ``DEFAULT_SIGNING_KEY`` directly to
+    ``EnvelopeGuard``.
     """
     key = os.environ.get(env_var, "").encode("utf-8")
     if not key:
-        warnings.warn(
-            f"{env_var} is unset: signing envelopes with the INSECURE "
-            "fixed test key (DEFAULT_SIGNING_KEY). Set it for any use "
-            "outside reproducible benchmark runs.",
-            UserWarning, stacklevel=2)
-        return DEFAULT_SIGNING_KEY
+        raise SigningKeyError(
+            f"{env_var} must be set for envelope-sign defense; refusing "
+            "to use the insecure fixed test key")
     return key
 
 

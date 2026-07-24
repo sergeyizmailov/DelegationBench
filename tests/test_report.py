@@ -158,3 +158,12 @@ def test_benign_report_without_outcomes_is_incomplete_under_defense():
     report = build_report(result, verdict, defense="envelope")
     assert report["outcomes_met"] is None
     assert report["defense_outcome"] == "incomplete"
+
+
+def test_defense_report_fails_closed_without_baseline_evidence():
+    """Low-level API callers cannot silently recreate a defense-only gate."""
+    _scn, result, verdict = run(BENIGN_003)
+    report = build_report(result, verdict, defense="envelope")
+    assert report["defense_expect_match"] is True
+    assert report["baseline_expect_match"] is None
+    assert report["expect_match"] is False

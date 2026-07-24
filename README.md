@@ -128,7 +128,8 @@ examples](docs/ci-integration.md)).
 - **Reference defense** — a delegation-envelope guard enforced at the tool
   boundary, outside model reasoning: `--defense envelope` (attenuation-only
   envelopes, depth/expiry/replay/origin checks) or `--defense envelope-sign`
-  (adds HMAC integrity; Ed25519 is the intended production upgrade).
+  (adds HMAC integrity and requires `DELEGATIONBENCH_KEY`; it fails closed
+  when the key is absent). Ed25519 is the intended production upgrade.
 - **Delegation-aware fuzzer** — mutates the authority-relevant structure of a
   scenario (payload wording, claimed role, topology, depth, expiry/replay,
   instruction source, requested scope) plus the envelope's integrity fields:
