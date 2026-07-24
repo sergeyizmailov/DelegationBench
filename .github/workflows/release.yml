@@ -6,9 +6,8 @@ name: release
 # attaches everything to the GitHub release.
 #
 # Trust model: the top-level token is read-only; each job re-grants only
-# the scopes it needs. The provenance job is a reusable workflow pinned
-# by commit SHA, so the signing identity is the SLSA generator, not this
-# repository.
+# the scopes it needs. The provenance job is an official isolated reusable
+# workflow, so the signing identity is the SLSA generator, not this repository.
 
 on:
   push:
@@ -81,13 +80,16 @@ jobs:
   provenance:
     # Official SLSA v1 generator. Signs provenance for exactly the hashed
     # subjects above and attaches delegationbench.intoto.jsonl to the
-    # release created by the previous job.
+    # release created by the previous job. Unlike ordinary third-party
+    # actions, SLSA reusable generators must use a full release tag so
+    # slsa-verifier can authenticate the builder identity:
+    # https://github.com/slsa-framework/slsa-github-generator#referencing-slsa-builders-and-generators
     needs: [dist, release]
     permissions:
       actions: read   # read workflow metadata for the provenance
       id-token: write # sign the provenance
       contents: write # attach the provenance to the release
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0 # zizmor: ignore[unpinned-uses] upstream requires @vX.Y.Z for verification
     with:
       base64-subjects: ${{ needs.dist.outputs.hashes }}
       provenance-name: delegationbench.intoto.jsonl

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-24
+
+### Fixed
+
+- Reference the official SLSA generic reusable generator by its full
+  `v2.1.0` tag, as required by the generator and verifier trust model.
+  Referencing the workflow by commit SHA generated signed provenance but left
+  its release-asset path empty, causing the final provenance job to fail.
+
 ## [0.5.0] - 2026-07-24
 
 ### Added

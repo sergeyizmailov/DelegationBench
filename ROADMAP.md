@@ -4,7 +4,7 @@ DelegationBench is an early open-source security project. The roadmap separates
 the reproducible baseline available today from the validation and integration
 work needed for a stable release.
 
-## Current baseline — v0.5.0
+## Current baseline — v0.5.1
 
 - Deterministic runner, authorization oracle, delegation-envelope reference
   defense, and authority-aware fuzzer.
