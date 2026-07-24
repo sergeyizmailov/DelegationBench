@@ -365,7 +365,13 @@ def evaluate(trace: Trace, grant: dict) -> Verdict:
         escalation_depth = depth_of.get(deepest, 0)
     path: list[str] = []
     task_id = deepest
-    while task_id is not None and task_id in agent_of:
+    # A corrupted trace can contain a parent cycle (e.g. a task listed as
+    # its own parent); walk with a visited set so the path reconstruction
+    # always terminates.
+    seen: set[str] = set()
+    while (task_id is not None and task_id in agent_of
+           and task_id not in seen):
+        seen.add(task_id)
         path.append(agent_of[task_id])
         task_id = parent_of.get(task_id)
     path.reverse()

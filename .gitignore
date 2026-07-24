@@ -8,3 +8,12 @@ venv/
 .pytest_cache/
 .DS_Store
 .notes/
+
+# Fuzzing artifacts: crash reproducers and fuzzer-grown corpus units stay
+# local; only curated seed-* corpus files are tracked.
+crash-*
+oom-*
+timeout-*
+leak-*
+fuzz/corpora/**
+!fuzz/corpora/**/seed-*
