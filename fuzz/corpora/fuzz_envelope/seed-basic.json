@@ -1,0 +1,4 @@
+{"principal": "user-a", "task_id": "t0", "child_task": "t1", "nonce": "n0",
+ "allowed_actions": ["docs.read", "email.read"], "scope": ["docs.read"],
+ "max_delegation_depth": 2, "depth": 0, "expires_at": 1000.0,
+ "key": "root-key", "other_key": "wrong-key"}

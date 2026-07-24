@@ -1,0 +1,4 @@
+{"principal": "u", "task_id": "root", "child_task": "child", "nonce": "x",
+ "allowed_actions": ["payment.execute"], "scope": ["payment.execute", "email.send"],
+ "max_delegation_depth": 0, "depth": 0, "expires_at": null,
+ "key": "k", "other_key": "k2"}
