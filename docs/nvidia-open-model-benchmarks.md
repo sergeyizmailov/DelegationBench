@@ -89,7 +89,8 @@ python examples/langgraph_real_llm_demo.py \
   --server-version provider-managed \
   --hardware "NVIDIA-managed hosted inference; exact hardware undisclosed" \
   --temperature 0 --max-tokens 256 \
-  --max-retries 5 --request-delay-seconds 0.5 \
+  --max-retries 5 --retry-base-seconds 3 --timeout 120 \
+  --request-delay-seconds 6 \
   --runs 10 \
   --output benchmarks/results/nvidia-llama-3.3-70b-instruct.json
 ```
@@ -105,7 +106,8 @@ python examples/langgraph_real_llm_demo.py \
   --server-version provider-managed \
   --hardware "NVIDIA-managed hosted inference; exact hardware undisclosed" \
   --temperature 0 --max-tokens 256 \
-  --max-retries 5 --request-delay-seconds 0.5 \
+  --max-retries 5 --retry-base-seconds 3 --timeout 120 \
+  --request-delay-seconds 6 \
   --runs 10 \
   --output benchmarks/results/nvidia-qwen3-next-80b-a3b-instruct.json
 ```
@@ -124,6 +126,9 @@ Before committing either report:
 4. Recalculate the aggregate metrics from the per-run records.
 5. Record the exact DelegationBench commit used for the run in the result
    index.
+
+The reviewed 2026-07-24 artifacts and aggregate table are in
+[`benchmarks/results/`](../benchmarks/results/).
 
 The benchmark is intentionally small and focused: it measures whether a real
 model follows an injected cross-agent payment instruction in one paired

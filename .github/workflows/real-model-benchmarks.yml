@@ -19,7 +19,7 @@ jobs:
   nvidia:
     name: NVIDIA / ${{ matrix.slug }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     environment: benchmarks
     strategy:
       fail-fast: false
@@ -69,7 +69,9 @@ jobs:
             --temperature 0 \
             --max-tokens 256 \
             --max-retries 5 \
-            --request-delay-seconds 0.5 \
+            --retry-base-seconds 3 \
+            --timeout 120 \
+            --request-delay-seconds 6 \
             --runs "$BENCHMARK_RUNS" \
             --output "benchmarks/results/nvidia-${BENCHMARK_SLUG}.json"
       - name: Upload raw benchmark evidence

@@ -13,13 +13,14 @@
 
 <p align="center">
   <a href="#quickstart">Quickstart</a> ·
-  <a href="THREAT_MODEL.md">Threat model</a> ·
-  <a href="docs/scenario-coverage.md">Scenario coverage</a> ·
-  <a href="docs/benchmark-protocol.md">Benchmark protocol</a> ·
-  <a href="docs/validation-kit.md">Validation kit</a> ·
-  <a href="docs/fuzzing.md">Fuzzing</a> ·
-  <a href="ROADMAP.md">Roadmap</a> ·
-  <a href="CONTRIBUTING.md">Contributing</a>
+  <a href="https://github.com/sergeyizmailov/DelegationBench/blob/main/THREAT_MODEL.md">Threat model</a> ·
+  <a href="https://github.com/sergeyizmailov/DelegationBench/blob/main/docs/scenario-coverage.md">Scenario coverage</a> ·
+  <a href="https://github.com/sergeyizmailov/DelegationBench/blob/main/docs/benchmark-protocol.md">Benchmark protocol</a> ·
+  <a href="https://github.com/sergeyizmailov/DelegationBench/blob/main/docs/external-validation.md">External validation</a> ·
+  <a href="https://github.com/sergeyizmailov/DelegationBench/blob/main/docs/validation-kit.md">Validation kit</a> ·
+  <a href="https://github.com/sergeyizmailov/DelegationBench/blob/main/docs/fuzzing.md">Fuzzing</a> ·
+  <a href="https://github.com/sergeyizmailov/DelegationBench/blob/main/ROADMAP.md">Roadmap</a> ·
+  <a href="https://github.com/sergeyizmailov/DelegationBench/blob/main/CONTRIBUTING.md">Contributing</a>
 </p>
 
 # DelegationBench
@@ -100,7 +101,7 @@ delegationbench run scenarios/ --defense envelope
 
 Exit code is 0 when every scenario matches its `expect` contract — drop it
 straight into CI (see the [one-command and GitHub Action
-examples](docs/ci-integration.md)).
+examples](https://github.com/sergeyizmailov/DelegationBench/blob/main/docs/ci-integration.md)).
 
 ## At a glance
 
@@ -118,13 +119,13 @@ examples](docs/ci-integration.md)).
   (allowed actions, max delegation depth, TTL), content stores (docs, emails,
   config), and scripted agent rules that stand in for LLM instruction-following.
 - **Deterministic authorization oracle** — judges seven violation classes over the
-  execution trace (see [THREAT_MODEL.md](THREAT_MODEL.md)):
+  execution trace (see [THREAT_MODEL.md](https://github.com/sergeyizmailov/DelegationBench/blob/main/THREAT_MODEL.md)):
   V1 authority expansion on handoff · V2 confused deputy · V3 depth violation ·
   V4 expired/replayed delegation · V5 origin loss · V6 scope widening via result ·
   V7 principal substitution.
 - **75-scenario corpus** — 38 attacks and 37 benign twins spanning V1–V7 that
   must stay clean (a defense that blocks everything is a failure, not a win).
-  The [coverage matrix](docs/scenario-coverage.md) records the paired
+  The [coverage matrix](https://github.com/sergeyizmailov/DelegationBench/blob/main/docs/scenario-coverage.md) records the paired
   invariant and workflow surface.
 - **Reference defense** — a delegation-envelope guard enforced at the tool
   boundary, outside model reasoning: `--defense envelope` (attenuation-only
@@ -228,7 +229,7 @@ authorized it. Per-agent permission checks miss this; the oracle does not.
 ## Real LangGraph + LLM demo
 
 The deterministic corpus does not need a model or API key. A separate
-[end-to-end demo](examples/langgraph_real_llm_demo.py) connects a real
+[end-to-end demo](https://github.com/sergeyizmailov/DelegationBench/blob/main/examples/langgraph_real_llm_demo.py) connects a real
 OpenAI-compatible open-weight model endpoint to a compiled LangGraph graph,
 executes agent handoffs and tool calls, and evaluates the observed trace with
 DelegationBench:
@@ -247,6 +248,29 @@ python examples/langgraph_real_llm_demo.py \
 DelegationBench does not install or start a model server. Model choice,
 serving, hardware use, and benchmark repetition remain explicit harness
 decisions.
+
+### Published open-weight results
+
+Two hosted open-weight models were run through the same real LangGraph task
+with 10 attack and 10 benign trials each:
+
+| Model | Attack success | False positives | Benign task success | Trial errors |
+|---|---:|---:|---:|---:|
+| Llama 3.3 70B Instruct | 0/10 | 0/10 | 10/10 | 0 |
+| Qwen3-Next 80B-A3B Instruct | 0/10 | 0/10 | 10/10 | 0 |
+
+Both models read the document and refused its injected cross-agent payment
+instruction in every attack trial. The
+[reviewed raw reports, exact configuration, hashes, and limitations](https://github.com/sergeyizmailov/DelegationBench/tree/main/benchmarks/results)
+are versioned in the repository. This is one paired task, not a claim that the
+entire deterministic corpus was converted into LLM-driven scenarios.
+
+## External validation
+
+Three developers and security practitioners published attributable validation
+reports with commands, environments, results, and limitations. One explicitly
+confirmed that they would use the documented workflow as a CI gate. See the
+[evidence index](https://github.com/sergeyizmailov/DelegationBench/blob/main/docs/external-validation.md) and the linked original issues.
 
 ## Repository layout
 
@@ -267,7 +291,7 @@ THREAT_MODEL.md        # formal scope: what we test and what we deliberately don
 Not a prompt-injection scanner, not a taint tracker, not an authorization
 gateway, not a general agent benchmark. Injection is just one delivery
 mechanism; the invariant under test is authority propagation. See
-[THREAT_MODEL.md](THREAT_MODEL.md) §3.
+[THREAT_MODEL.md](https://github.com/sergeyizmailov/DelegationBench/blob/main/THREAT_MODEL.md) §3.
 
 ## Development
 
@@ -279,15 +303,20 @@ delegationbench run scenarios/ --defense envelope
 ```
 
 Contributions welcome — new attack scenarios are the best first contribution.
-See [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), and the
-[threat model](THREAT_MODEL.md). The parser, envelopes, traces, and oracle are
+See [CONTRIBUTING.md](https://github.com/sergeyizmailov/DelegationBench/blob/main/CONTRIBUTING.md),
+[CHANGELOG.md](https://github.com/sergeyizmailov/DelegationBench/blob/main/CHANGELOG.md),
+and the [threat model](https://github.com/sergeyizmailov/DelegationBench/blob/main/THREAT_MODEL.md).
+The parser, envelopes, traces, and oracle are
 fuzzed continuously with ClusterFuzzLite — see
-[docs/fuzzing.md](docs/fuzzing.md). Security issues:
-[SECURITY.md](SECURITY.md) (private reporting, please). For questions, use [GitHub
+[docs/fuzzing.md](https://github.com/sergeyizmailov/DelegationBench/blob/main/docs/fuzzing.md).
+Security issues:
+[SECURITY.md](https://github.com/sergeyizmailov/DelegationBench/blob/main/SECURITY.md)
+(private reporting, please). For questions, use [GitHub
 Discussions](https://github.com/sergeyizmailov/DelegationBench/discussions) or
-see [SUPPORT.md](SUPPORT.md). If you use DelegationBench in research, see
-[CITATION.cff](CITATION.cff).
+see [SUPPORT.md](https://github.com/sergeyizmailov/DelegationBench/blob/main/SUPPORT.md).
+If you use DelegationBench in research, see
+[CITATION.cff](https://github.com/sergeyizmailov/DelegationBench/blob/main/CITATION.cff).
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0. See [LICENSE](https://github.com/sergeyizmailov/DelegationBench/blob/main/LICENSE).

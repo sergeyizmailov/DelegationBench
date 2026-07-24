@@ -111,3 +111,10 @@ def test_model_classifies_final_rate_limit(monkeypatch):
         model.decide("system", "transcript")
 
     assert caught.value.kind == "rate_limit"
+
+
+def test_git_commit_identifies_harness_revision():
+    commit = DEMO.git_commit()
+
+    assert len(commit) == 40
+    assert all(character in "0123456789abcdef" for character in commit)

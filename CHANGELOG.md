@@ -7,8 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-24
+
 ### Added
 
+- Reviewed real-model benchmark reports for Llama 3.3 70B Instruct and
+  Qwen3-Next 80B-A3B Instruct through NVIDIA's hosted API. Each report
+  preserves 10 attack and 10 benign trials, raw model decisions, LangGraph
+  callback events, DelegationBench traces, configuration, failures, and
+  independently recalculated aggregate metrics.
+- Public external-validation index linking three attributable reports,
+  including one explicit confirmation that the documented workflow is
+  suitable as a CI gate.
+- Hardened the real-model harness with classified retries and failures,
+  fail-fast credential checks, API-key environment loading, provider metadata,
+  and exact DelegationBench/harness revision fields.
+- Manual, protected-environment GitHub workflow for reproducing the hosted
+  open-weight result pair without downloading model weights.
 - Continuous fuzzing with ClusterFuzzLite/Atheris: four coverage-guided
   targets (`fuzz/`) for scenario loading, authority envelopes, trace
   construction, and oracle evaluation, with seed corpora built from real

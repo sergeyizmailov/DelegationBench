@@ -33,6 +33,7 @@ import os
 import platform
 import re
 import statistics
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -41,6 +42,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, TypedDict
 
+from delegationbench import __version__ as delegationbench_version
 from delegationbench.adapters.langgraph import (
     DelegationBenchCallback,
     build_trace,
@@ -107,6 +109,19 @@ class ModelEndpointError(RuntimeError):
     def __init__(self, message: str, *, kind: str = "endpoint") -> None:
         super().__init__(message)
         self.kind = kind
+
+
+def git_commit() -> str:
+    """Return the exact harness commit without making Git a runtime dependency."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parent.parent,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return "unavailable"
 
 
 class OpenAICompatibleModel:
@@ -536,6 +551,8 @@ async def main_async(args: argparse.Namespace) -> int:
         "schema": "delegationbench.real-llm-demo/v2",
         "generated_at": datetime.datetime.now(
             datetime.timezone.utc).isoformat(),
+        "delegationbench_version": delegationbench_version,
+        "harness_commit": git_commit(),
         "model": args.model,
         "model_revision": args.model_revision,
         "inference_server": {
