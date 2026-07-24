@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `delegationbench validate-adapter <trace.json>` lints a recorded adapter
+  trace for misconfiguration before the oracle judges it: missing action
+  mappings (unmapped tool names), broken delegation links, task
+  re-binding, agent/task mismatch, dropped principals, duplicate nonces,
+  and inconsistent depth/expiry metadata. `--strict` fails on warnings
+  too; `--scenario` checks actions against the scenario vocabulary and
+  principal against the grant.
+- Expanded real-model harness `examples/langgraph_real_llm_suite.py`:
+  representative attack/benign pairs for V1/V2, V3, V6, and V7 on the
+  same LangGraph + adapter path, with offline scripted-model tests
+  proving each expected oracle classification. The on-demand
+  `real-model-benchmarks` workflow accepts `suite=v1-v7`. V4/V5 remain
+  corpus-only by design; the V6 pair is classified V2 at current adapter
+  fidelity (documented).
+- `--junit-detail summary|failures|full` controls how much JUnit
+  `system-out` carries (a matching corpus drops from ~226 KB to ~5 KB at
+  `summary`/`failures`). Full traces stay in the JSON formats; `full`
+  remains the default for backward compatibility.
+- `GOVERNANCE.md`: scenario review criteria, release cadence,
+  compatibility policy, security handling, and roles.
+- ROMA end-to-end status note (`docs/research/roma-e2e-status.md`):
+  what exists, what blocks a live run, and the proposed upstream fixes.
+
+### Changed
+
+- Directory-run output now states explicitly that `N/N` is a
+  deterministic corpus contract validation, not a real-model detection
+  rate.
+- The bundled-corpus fallback message now says plainly that the given
+  path does not exist and the packaged corpus is being used instead.
+
 ## [0.5.1] - 2026-07-24
 
 ### Fixed

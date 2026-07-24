@@ -44,6 +44,11 @@ verdict, and the trace (`--format json`).
 
 Do NOT open a public issue. See [SECURITY.md](SECURITY.md).
 
+## Governance
+
+Scenario review criteria, release cadence, the compatibility policy, and
+roles are defined in [GOVERNANCE.md](GOVERNANCE.md).
+
 ## License
 
 By contributing you agree your contributions are licensed under Apache-2.0.
