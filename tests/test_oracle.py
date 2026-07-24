@@ -616,3 +616,19 @@ def test_empty_nonce_exempt_from_replay():
     verdict = evaluate(trace, GRANT)
     assert "V4" not in verdict.kinds
     assert not verdict.violation
+
+
+def test_self_parent_cycle_terminates():
+    """Fuzz finding: a corrupted trace where a task is its own parent must
+    not hang or exhaust memory in verdict path reconstruction."""
+    trace, _ = make_trace()
+    root_delegation(trace)
+    # Self-parenting re-delegation (corrupted/attacker-controlled trace).
+    trace.delegation("root", "root", "reader", ["docs.read"], depth=0,
+                     nonce="n-cycle", expires_at=None, source="document")
+    # Force the flagged-task path walk by creating an unauthorized call.
+    trace.tool_call("root", "reader", "payment.execute", {"amount": 1},
+                    source="document", nonce="n-cycle")
+    verdict = evaluate(trace, GRANT)
+    assert verdict.violation
+    assert verdict.delegation_path  # reconstructed path is finite
