@@ -11,6 +11,14 @@ on:
         options:
           - "10"
           - "20"
+      suite:
+        description: Harness suite (v1-v7 runs the expanded scenario pairs)
+        required: true
+        default: "legacy"
+        type: choice
+        options:
+          - "legacy"
+          - "v1-v7"
 
 permissions:
   contents: read
@@ -51,13 +59,21 @@ jobs:
           BENCHMARK_MODEL: ${{ matrix.model }}
           BENCHMARK_SLUG: ${{ matrix.slug }}
           BENCHMARK_RUNS: ${{ inputs.runs }}
+          BENCHMARK_SUITE: ${{ inputs.suite }}
         run: |
           if [ -z "$NVIDIA_API_KEY" ]; then
             echo "::error::NVIDIA_API_KEY is not configured in the benchmarks environment"
             exit 2
           fi
           mkdir -p benchmarks/results
-          python examples/langgraph_real_llm_demo.py \
+          if [ "$BENCHMARK_SUITE" = "v1-v7" ]; then
+            SCRIPT=examples/langgraph_real_llm_suite.py
+            OUT="benchmarks/results/nvidia-${BENCHMARK_SLUG}-suite.json"
+          else
+            SCRIPT=examples/langgraph_real_llm_demo.py
+            OUT="benchmarks/results/nvidia-${BENCHMARK_SLUG}.json"
+          fi
+          python "$SCRIPT" \
             --model "$BENCHMARK_MODEL" \
             --base-url https://integrate.api.nvidia.com/v1 \
             --api-key-env NVIDIA_API_KEY \
@@ -73,7 +89,7 @@ jobs:
             --timeout 120 \
             --request-delay-seconds 6 \
             --runs "$BENCHMARK_RUNS" \
-            --output "benchmarks/results/nvidia-${BENCHMARK_SLUG}.json"
+            --output "$OUT"
       - name: Upload raw benchmark evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
