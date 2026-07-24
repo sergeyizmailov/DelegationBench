@@ -371,9 +371,16 @@ def reports_to_sarif(reports: Iterable[dict],
                         "https://github.com/sergeyizmailov/DelegationBench"
                     ),
                     "rules": rules,
-                    "taxa": _TAXONOMY_COMPONENTS,
+                    "supportedTaxonomies": [
+                        {
+                            "name": taxonomy["name"],
+                            "guid": taxonomy["guid"],
+                        }
+                        for taxonomy in _TAXONOMY_COMPONENTS
+                    ],
                 },
             },
+            "taxonomies": _TAXONOMY_COMPONENTS,
             "results": results,
         }],
     }

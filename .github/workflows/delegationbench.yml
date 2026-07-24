@@ -30,6 +30,8 @@ jobs:
       - name: Scenario corpus (reference defense)
         run: delegationbench run scenarios/ --defense envelope
       - name: Scenario corpus (signed reference defense)
+        env:
+          DELEGATIONBENCH_KEY: ci-only-regression-test-key
         run: delegationbench run scenarios/ --defense envelope-sign
 
   integration:
@@ -53,6 +55,48 @@ jobs:
         run: pip install -e '.[langgraph]' pytest 'langchain>=1,<2'
       - name: Integration tests (real LangGraph)
         run: python -m pytest tests/ -q
+
+  sarif:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install
+        run: pip install -e . jsonschema
+      - name: Generate SARIF
+        run: |
+          delegationbench run scenarios/ --defense envelope \
+            --format sarif --output results.sarif
+      - name: Validate against the official SARIF 2.1.0 schema
+        env:
+          SARIF_SCHEMA_COMMIT: ed71d4f62db866ce3698a08a5ec3f7f2e775545d
+        run: |
+          curl --fail --silent --show-error --location \
+            "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/${SARIF_SCHEMA_COMMIT}/sarif-2.1/schema/sarif-schema-2.1.0.json" \
+            --output sarif-schema-2.1.0.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          import jsonschema
+
+          schema = json.loads(Path("sarif-schema-2.1.0.json").read_text())
+          document = json.loads(Path("results.sarif").read_text())
+          jsonschema.validate(document, schema)
+          PY
+      - name: Upload SARIF to GitHub code scanning
+        if: github.event_name == 'push'
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+        with:
+          sarif_file: results.sarif
+          category: delegationbench-self-test
 
   package:
     runs-on: ubuntu-latest

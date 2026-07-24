@@ -1,7 +1,6 @@
 """Reference-defense tests: the delegation-envelope guard."""
 
 import dataclasses
-import warnings
 from types import SimpleNamespace
 
 import pytest
@@ -10,6 +9,7 @@ from delegationbench.cli import main
 from delegationbench.clock import VirtualClock
 from delegationbench.corpus import corpus_path
 from delegationbench.defense import (DEFAULT_SIGNING_KEY, EnvelopeGuard,
+                                     SigningKeyError,
                                      signing_key_from_env)
 from delegationbench.envelope import Envelope
 from delegationbench.agents import Agent
@@ -130,7 +130,8 @@ def test_blocked_events_are_not_oracle_violations():
     assert verdict.unauthorized_calls == 0
     # The payment never executed in the mock world.
     assert not any(p["status"] == "executed" for p in result.tools.payments)
-    report = build_report(result, verdict, defense="envelope")
+    report = build_report(
+        result, verdict, defense="envelope", baseline_expect_match=True)
     assert report["defense_outcome"] == "contained"
     assert report["expect_match"] is True
 
@@ -147,7 +148,8 @@ def test_defense_outcome_mapping():
 def test_every_attack_contained_with_defense():
     for path in sorted(ATTACKS_DIR.glob("*.yaml")):
         scn, result, verdict = run_with_defense(path)
-        report = build_report(result, verdict, defense="envelope")
+        report = build_report(
+            result, verdict, defense="envelope", baseline_expect_match=True)
         assert report["defense_outcome"] == "contained", (
             f"{scn.id}: {report['defense_outcome']} "
             f"(kinds={verdict.kinds}, blocked={len(verdict.blocked)})")
@@ -159,7 +161,8 @@ def test_benign_scenarios_pass_with_defense_zero_blocks():
         scn, result, verdict = run_with_defense(path)
         assert not verdict.violation, f"{scn.id}: {verdict.reasons}"
         assert verdict.blocked == [], f"{scn.id}: {verdict.blocked}"
-        report = build_report(result, verdict, defense="envelope")
+        report = build_report(
+            result, verdict, defense="envelope", baseline_expect_match=True)
         assert report["defense_outcome"] == "clean"
         assert report["expect_match"] is True
 
@@ -182,7 +185,8 @@ def test_directory_run_with_defense_envelope(capsys):
     assert "Unauthorized Action Rate:  0.000" in out
 
 
-def test_directory_run_with_defense_envelope_sign(capsys):
+def test_directory_run_with_defense_envelope_sign(monkeypatch, capsys):
+    monkeypatch.setenv("DELEGATIONBENCH_KEY", "test-signing-key")
     assert main(["run", str(SCENARIOS_DIR), "--defense",
                  "envelope-sign"]) == 0
     out = capsys.readouterr().out
@@ -356,7 +360,8 @@ def test_attack_016_contained_via_v7_block():
     assert verdict.blocked
     assert any(b["phase"] == "delegation" and "V7" in b["reason"]
                for b in verdict.blocked)
-    report = build_report(result, verdict, defense="envelope")
+    report = build_report(
+        result, verdict, defense="envelope", baseline_expect_match=True)
     assert report["defense_outcome"] == "contained"
     assert report["expect_match"] is True
 
@@ -523,16 +528,23 @@ def test_replay_keyed_on_principal_and_nonce():
         guard.before_delegation(AGENT, parent, child, "fetch", scope)
 
 
-# -- Default signing key warning ------------------------------------------------
+# -- Signed-defense configuration ----------------------------------------------
 
-def test_signing_key_from_env_warns_on_insecure_default(monkeypatch):
+def test_signing_key_from_env_fails_closed_when_unset(monkeypatch):
     monkeypatch.delenv("DELEGATIONBENCH_KEY", raising=False)
-    with pytest.warns(UserWarning, match="INSECURE"):
-        assert signing_key_from_env() == DEFAULT_SIGNING_KEY
+    with pytest.raises(SigningKeyError, match="must be set"):
+        signing_key_from_env()
 
 
-def test_signing_key_from_env_no_warning_when_set(monkeypatch):
+def test_signing_key_from_env_returns_configured_key(monkeypatch):
     monkeypatch.setenv("DELEGATIONBENCH_KEY", "real-key")
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        assert signing_key_from_env() == b"real-key"
+    assert signing_key_from_env() == b"real-key"
+
+
+def test_cli_signed_defense_fails_cleanly_without_key(monkeypatch, capsys):
+    monkeypatch.delenv("DELEGATIONBENCH_KEY", raising=False)
+    assert main(["run", str(ATTACK_008),
+                 "--defense", "envelope-sign"]) == 2
+    captured = capsys.readouterr()
+    assert "DELEGATIONBENCH_KEY must be set" in captured.err
+    assert "Traceback" not in captured.err

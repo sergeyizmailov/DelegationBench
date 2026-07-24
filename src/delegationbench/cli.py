@@ -2,11 +2,13 @@
 
     delegationbench run <scenario.yaml> [--format terminal|json|junit|sarif]
     delegationbench run <directory>     # run all *.yaml / *.yml recursively
-    delegationbench fuzz <seed.yaml>    # fuzz a seed scenario (--budget, --seed, --defense, --out, --minimize)
+    delegationbench fuzz <seed.yaml>    # fuzz a seed scenario
+                                        # (--budget, --seed, --defense,
+                                        #  --out, --minimize)
 
-Exit codes: 0 = actual verdict matches the scenario's expect contract
-(with a defense active: the derived defense outcome), 1 = mismatch,
-2 = usage or scenario errors.
+Exit codes: 0 = actual verdict matches the scenario's baseline expect contract
+and, with a defense active, the derived defense outcome; 1 = mismatch; 2 =
+usage, scenario, or configuration errors.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from pathlib import Path
 from . import __version__
 from .agents import EngineError
 from .corpus import resolve_scenario_path
-from .defense import EnvelopeGuard, signing_key_from_env
+from .defense import EnvelopeGuard, SigningKeyError, signing_key_from_env
 from .fuzzer import render_campaign_summary, run_campaign
 from .oracle import evaluate
 from .outputs import (benchmark_document, reports_to_junit,
@@ -37,24 +39,48 @@ EXIT_MISMATCH = 1
 EXIT_ERROR = 2
 
 
-def _make_defense(name: str) -> EnvelopeGuard | None:
+def _make_defense(name: str, *,
+                  signing_key: bytes | None = None) -> EnvelopeGuard | None:
     if name == "none":
         return None
     if name == "envelope-sign":
-        return EnvelopeGuard(signing_key=signing_key_from_env())
+        if signing_key is None:
+            signing_key = signing_key_from_env()
+        return EnvelopeGuard(signing_key=signing_key)
     return EnvelopeGuard()
 
 
-def _run_one(path: Path, defense: str) -> dict:
-    """Load, run, judge, and build a report for one scenario file."""
-    scn = load_scenario(path)
-    result = run_scenario(scn, defense=_make_defense(defense))
-    verdict = evaluate(result.trace, {
+def _grant(scn) -> dict:
+    return {
         "allowed_actions": scn.grant.allowed_actions,
         "max_delegation_depth": scn.grant.max_delegation_depth,
         "principal": scn.principal,
-    })
-    return build_report(result, verdict, defense=defense)
+    }
+
+
+def _run_one(path: Path, defense: str,
+             signing_key: bytes | None = None) -> dict:
+    """Load, run, judge, and build a report for one scenario file."""
+    scn = load_scenario(path)
+    defense_impl = _make_defense(defense, signing_key=signing_key)
+    baseline_expect_match = None
+    if defense != "none":
+        baseline_result = run_scenario(scn)
+        baseline_verdict = evaluate(baseline_result.trace, _grant(scn))
+        baseline_report = build_report(baseline_result, baseline_verdict)
+        baseline_expect_match = baseline_report["expect_match"]
+
+    result = run_scenario(
+        scn,
+        defense=defense_impl,
+    )
+    verdict = evaluate(result.trace, _grant(scn))
+    return build_report(
+        result,
+        verdict,
+        defense=defense,
+        baseline_expect_match=baseline_expect_match,
+    )
 
 
 def _emit(data, *, output: str | None, text: bool = False) -> None:
@@ -118,6 +144,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return EXIT_ERROR
 
+    signing_key = None
+    if args.defense == "envelope-sign":
+        try:
+            signing_key = signing_key_from_env()
+        except SigningKeyError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return EXIT_ERROR
+
     if target.is_dir():
         files = sorted(p for p in target.rglob("*")
                        if p.suffix in (".yaml", ".yml"))
@@ -131,7 +165,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         errors: list[dict] = []
         for f in files:
             try:
-                report = _run_one(f, args.defense)
+                report = _run_one(f, args.defense, signing_key)
             except (ScenarioError, ToolError, RunLimitExceeded,
                     EngineError) as e:
                 print(f"error: {e}", file=sys.stderr)
@@ -170,7 +204,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return EXIT_MATCH if all(r["ok"] for r in rows) else EXIT_MISMATCH
 
     try:
-        report = _run_one(target, args.defense)
+        report = _run_one(target, args.defense, signing_key)
     except (ScenarioError, ToolError, RunLimitExceeded,
             EngineError) as e:
         print(f"error: {e}", file=sys.stderr)
@@ -245,8 +279,7 @@ def build_parser() -> argparse.ArgumentParser:
                      help="reference defense enforced at the tool "
                           "boundary: 'envelope' checks delegation "
                           "envelopes; 'envelope-sign' also requires HMAC "
-                          "signatures (key from DELEGATIONBENCH_KEY, "
-                          "insecure default if unset)")
+                          "signatures (DELEGATIONBENCH_KEY is required)")
     run.set_defaults(func=_cmd_run)
 
     fuzz = sub.add_parser("fuzz", help="mutate a seed scenario and hunt for "

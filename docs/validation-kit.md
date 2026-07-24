@@ -95,7 +95,7 @@ A real verdict looks like:
   Unauthorized action: payment.execute
   Verdict: V1 authority expansion + V2 confused deputy
 
-Repo: https://github.com/sergeyizmailov/delegationbench (v0.4.4, on PyPI).
+Repo: https://github.com/sergeyizmailov/delegationbench (v0.4.5, on PyPI).
 There is a clean-room ROMA adapter (src/delegationbench/adapters/roma.py) that
 observes task trees and tool calls through public runtime interfaces only.
 
@@ -161,4 +161,31 @@ https://github.com/sergeyizmailov/delegationbench
 
 ## Responses
 
-_(none yet — pending outreach; 0/3–5, workflow/CI confirmations: 0/1)_
+### 2026-07-24 — @itsmilaverden-droid
+
+- Public attribution: approved.
+- Reviewed: v0.4.4 from PyPI and source commit `e4575bf`.
+- Reproduced: 75-scenario corpus in all defense modes, 299 tests, real
+  LangGraph integration tests, JUnit, SARIF, and benchmark JSON.
+- Downstream CI: ran the composite action in a dedicated repository. Confirmed
+  a green corpus gate and an expected red regression gate. The same run found
+  the SARIF schema and defense-baseline contract defects fixed in v0.4.5.
+- Workflow/CI answer: conditional pending those fixes and custom scenarios for
+  the respondent's own topology.
+- Evidence: [validation issue #20](https://github.com/sergeyizmailov/DelegationBench/issues/20)
+  and its [live CI follow-up](https://github.com/sergeyizmailov/DelegationBench/issues/20#issuecomment-5064912770).
+- Follow-up: rerun against v0.4.5 and reassess the remaining adoption blockers.
+
+### 2026-07-24 — @wodastoks-source
+
+- Public attribution: approved.
+- Reviewed: v0.4.4 from PyPI and source commit `e4575bf`.
+- Reproduced: clean installation, all corpus modes, 299 tests, LangGraph
+  integration tests, and all three machine-report formats.
+- Workflow/CI answer: conditional; interested in the SARIF path for a
+  LangGraph side project, but has not yet integrated a live system.
+- Evidence: [validation issue #21](https://github.com/sergeyizmailov/DelegationBench/issues/21).
+
+Current count: **2/3–5 public reproductions**. One downstream GitHub Actions
+integration has been demonstrated; a genuine unconditional workflow/CI
+adoption confirmation is still pending.
