@@ -15,9 +15,12 @@ for fuzzer in $(find fuzz -maxdepth 1 -name 'fuzz_*.py'); do
   pyinstaller --distpath "$OUT" --onefile --name "$fuzzer_package" "$fuzzer"
 
   # Execution wrapper. Atheris needs the sanitizer runtime preloaded;
-  # PyYAML ships a C extension, so keep the preload.
+  # PyYAML ships a C extension, so keep the preload. The first comment is
+  # load-bearing: ClusterFuzzLite discovers fuzz targets by scanning for
+  # the LLVMFuzzerTestOneInput string.
   cat > "$OUT/${fuzzer_basename}" <<EOF
 #!/bin/sh
+# LLVMFuzzerTestOneInput for fuzzer.
 this_dir=\$(dirname "\$0")
 LD_PRELOAD=\$this_dir/sanitizer_with_fuzzer.so \
   ASAN_OPTIONS=\$ASAN_OPTIONS:detect_leaks=0 \
