@@ -216,3 +216,56 @@ def test_benchmark_document_and_json_writer(tmp_path):
     assert document["git_commit"] is None
     output = write_json(document, tmp_path / "results.json")
     assert json.loads(output.read_text())["metrics"]["scenarios"] == 1
+
+
+def test_junit_detail_full_embeds_every_report():
+    xml = reports_to_junit([report(), report("benign-001", verdict="clean")],
+                           detail="full")
+    root = ET.fromstring(xml)
+    assert len(root.findall(".//system-out")) == 2
+
+
+def test_junit_detail_failures_embeds_only_mismatches():
+    xml = reports_to_junit(
+        [report(),  # passes: expect_match=True
+         report("benign-001", verdict="clean", expect_match=False)],
+        detail="failures")
+    root = ET.fromstring(xml)
+    cases = root.findall(".//testcase")
+    by_name = {c.attrib["name"]: c for c in cases}
+    assert by_name["attack-001"].find("system-out") is None
+    assert by_name["benign-001"].find("system-out") is not None
+    assert len(root.findall(".//failure")) == 1
+
+
+def test_junit_detail_summary_omits_system_out():
+    xml = reports_to_junit(
+        [report(), report("benign-001", verdict="clean",
+                          expect_match=False)],
+        detail="summary")
+    root = ET.fromstring(xml)
+    assert root.findall(".//system-out") == []
+    assert len(root.findall(".//failure")) == 1  # failures stay visible
+
+
+def test_junit_detail_rejects_unknown_level():
+    import pytest
+    with pytest.raises(ValueError):
+        reports_to_junit([report()], detail="everything")
+
+
+def test_junit_detail_default_is_full():
+    xml = reports_to_junit([report()])
+    root = ET.fromstring(xml)
+    assert len(root.findall(".//system-out")) == 1
+
+
+def test_cli_junit_detail_summary(tmp_path):
+    from delegationbench.cli import main
+    out = tmp_path / "junit.xml"
+    rc = main(["run", "scenarios/attacks/attack-008-malicious-document.yaml",
+               "--format", "junit", "--junit-detail", "summary",
+               "--output", str(out)])
+    assert rc == 0
+    root = ET.fromstring(out.read_text())
+    assert root.findall(".//system-out") == []

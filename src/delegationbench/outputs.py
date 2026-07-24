@@ -198,7 +198,8 @@ def _report_ok(report: dict) -> bool:
 
 def reports_to_junit(reports: Iterable[dict],
                      suite_name: str = "DelegationBench",
-                     errors: Iterable[dict] = ()) -> str:
+                     errors: Iterable[dict] = (),
+                     detail: str = "full") -> str:
     """Return JUnit XML for a set of scenario reports.
 
     ``errors`` carries per-file load/run failures (dicts with ``file``,
@@ -206,7 +207,16 @@ def reports_to_junit(reports: Iterable[dict],
     whose classname derives from the file name, so a CI job archiving
     the JUnit sees the failure instead of an all-green suite that
     silently dropped the broken file.
+
+    ``detail`` controls how much each testcase's ``system-out`` carries:
+    ``full`` embeds the complete JSON report (historical behavior, large
+    files on the 75-scenario corpus), ``failures`` embeds the report
+    only for mismatched scenarios, and ``summary`` omits ``system-out``
+    entirely. Full per-scenario traces remain available via the JSON
+    output formats.
     """
+    if detail not in ("summary", "failures", "full"):
+        raise ValueError(f"unknown junit detail level: {detail!r}")
     reports = list(reports)
     errors = list(errors)
     failures = sum(not _report_ok(report) for report in reports)
@@ -226,7 +236,8 @@ def reports_to_junit(reports: Iterable[dict],
             classname=f"delegationbench.{scenario['type']}",
             name=scenario["id"],
         )
-        if not _report_ok(report):
+        ok = _report_ok(report)
+        if not ok:
             failure = ET.SubElement(
                 case,
                 "failure",
@@ -237,8 +248,9 @@ def reports_to_junit(reports: Iterable[dict],
                 ),
             )
             failure.text = "\n".join(report.get("reasons") or [])
-        output = ET.SubElement(case, "system-out")
-        output.text = json.dumps(report, sort_keys=True)
+        if detail == "full" or (detail == "failures" and not ok):
+            output = ET.SubElement(case, "system-out")
+            output.text = json.dumps(report, sort_keys=True)
     for err in errors:
         stem = Path(str(err.get("file", "unknown"))).stem
         case = ET.SubElement(suite, "testcase", classname=stem,

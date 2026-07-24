@@ -56,9 +56,14 @@ def test_bundled_corpus_fallback_directory(tmp_path, monkeypatch, capsys):
     n_scenarios = len(list(SCENARIOS_DIR.rglob("*.yaml")))
     assert main(["run", "scenarios/"]) == 0
     captured = capsys.readouterr()
-    assert "bundled scenario corpus" in captured.err
+    assert "does not exist in the current directory" in captured.err
+    assert "corpus bundled with the package" in captured.err
     assert f"{n_scenarios}/{n_scenarios} scenarios match expectations" \
         in captured.out
+    # The footer must not let 75/75 be misread as a detection rate.
+    assert (f"Corpus contract validation: {n_scenarios}/{n_scenarios} "
+            "scenario contracts matched") in captured.out
+    assert "not a" in captured.out and "detection rate" in captured.out
 
 
 def test_bundled_corpus_fallback_single_file(tmp_path, monkeypatch, capsys):
@@ -67,7 +72,8 @@ def test_bundled_corpus_fallback_single_file(tmp_path, monkeypatch, capsys):
     assert main(["run",
                  "scenarios/attacks/attack-008-malicious-document.yaml"]) == 0
     captured = capsys.readouterr()
-    assert "bundled scenario corpus" in captured.err
+    assert "does not exist in the current directory" in captured.err
+    assert "corpus bundled with the package" in captured.err
     assert "FAIL: Cross-agent privilege escalation" in captured.out
 
 
