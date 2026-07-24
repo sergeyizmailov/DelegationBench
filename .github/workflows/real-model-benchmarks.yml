@@ -40,7 +40,11 @@ jobs:
           python-version: "3.13"
           cache: pip
       - name: Install benchmark harness
-        run: python -m pip install -e '.[langgraph-demo]'
+        # Same hash-locked LangGraph/LangChain set as the integration job
+        # (covers the [langgraph-demo] extra), then the package itself.
+        run: |
+          python -m pip install --require-hashes -r .github/requirements-integration.txt
+          python -m pip install --no-deps -e .
       - name: Run repeated attack and benign trials
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
