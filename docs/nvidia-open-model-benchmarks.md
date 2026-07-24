@@ -42,6 +42,34 @@ unset NVIDIA_API_KEY
 
 ## Reproduce the two reports
 
+### GitHub Actions
+
+The repository's manual `Real open-weight model benchmarks` workflow is the
+preferred publication path. It reads `NVIDIA_API_KEY` from the protected
+`benchmarks` environment, runs both models sequentially, and uploads one raw
+JSON artifact per model. It never runs on pushes or pull requests.
+
+An owner configures the secret once:
+
+```bash
+gh secret set NVIDIA_API_KEY \
+  --env benchmarks \
+  --repo sergeyizmailov/DelegationBench
+```
+
+Then run the workflow from the Actions tab or with:
+
+```bash
+gh workflow run real-model-benchmarks.yml \
+  --repo sergeyizmailov/DelegationBench \
+  --field runs=10
+```
+
+Delete the environment secret after downloading and reviewing the artifacts if
+continued access is not needed.
+
+### Local alternative
+
 Install the demo dependencies:
 
 ```bash
