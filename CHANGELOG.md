@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Release provenance: the SLSA generic generator now builds its builder
+  from source (`compile-generator: true`). The v0.5.0 tag run showed that
+  the default prebuilt-builder download rejects a SHA-pinned generator
+  reference ("Invalid ref ... Expected ref of the form refs/tags/vX.Y.Z"),
+  so provenance generation failed on the first real release. v0.5.0 was
+  backfilled with its build-time GitHub attestation bundle
+  (`delegationbench-0.5.0.intoto.jsonl`); future releases get full SLSA
+  generator provenance with the SHA pin intact.
+
 ## [0.5.0] - 2026-07-24
 
 ### Added

@@ -33,10 +33,24 @@ API token used for this project.
 5. Watch the two tag-triggered workflows:
    - `release.yml` — three jobs: `dist` (build, SBOM, GitHub attestation),
      `release` (uploads assets), `provenance` (the SLSA reusable generator,
-     attaches `delegationbench.intoto.jsonl`).
+     attaches `delegationbench.intoto.jsonl`). The generator is pinned by
+     commit SHA, so it runs with `compile-generator: true` (builds its
+     builder from the pinned source, ~2 minutes) — the prebuilt-builder
+     download only accepts tag refs and fails for SHA references.
    - `publish-pypi.yml` — Trusted Publishing, no stored token.
 6. Verify the release assets: wheel, sdist, `sbom.spdx.json`, and
-   `delegationbench.intoto.jsonl` must all be present.
+   `delegationbench.intoto.jsonl` must all be present. If the provenance
+   job ever fails after the release assets are uploaded, backfill from the
+   build-time GitHub attestation instead of re-tagging:
+
+   ```bash
+   gh release download vX.Y.Z -p "*.whl" -p "*.tar.gz" --dir backfill
+   (cd backfill && for f in *.whl *.tar.gz; do
+     gh attestation download "$f" --repo sergeyizmailov/DelegationBench
+   done)
+   cat backfill/*.jsonl > delegationbench-X.Y.Z.intoto.jsonl
+   gh release upload vX.Y.Z delegationbench-X.Y.Z.intoto.jsonl --clobber
+   ```
 7. Verify provenance and install from the public PyPI index:
 
    ```bash

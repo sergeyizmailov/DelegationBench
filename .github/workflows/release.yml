@@ -82,6 +82,13 @@ jobs:
     # Official SLSA v1 generator. Signs provenance for exactly the hashed
     # subjects above and attaches delegationbench.intoto.jsonl to the
     # release created by the previous job.
+    #
+    # compile-generator: true is required because the generator is pinned
+    # by commit SHA (supply-chain policy): the default prebuilt-builder
+    # download only accepts a tag ref of the form refs/tags/vX.Y.Z and
+    # fails with "Invalid ref" for a SHA (seen on the v0.5.0 tag run).
+    # Compiling the builder from the pinned checkout keeps the SHA pin
+    # and the SLSA provenance at the same time.
     needs: [dist, release]
     permissions:
       actions: read   # read workflow metadata for the provenance
@@ -92,3 +99,4 @@ jobs:
       base64-subjects: ${{ needs.dist.outputs.hashes }}
       provenance-name: delegationbench.intoto.jsonl
       upload-assets: true
+      compile-generator: true
