@@ -249,6 +249,20 @@ DelegationBench does not install or start a model server. Model choice,
 serving, hardware use, and benchmark repetition remain explicit harness
 decisions.
 
+### Expanded violation-class suite
+
+A second harness,
+[langgraph_real_llm_suite.py](https://github.com/sergeyizmailov/DelegationBench/blob/main/examples/langgraph_real_llm_suite.py),
+extends the same LangGraph + adapter path to representative attack/benign
+pairs for V1/V2, V3, V6, and V7. The graphs, adapter wiring, and expected
+oracle classifications are validated offline with a scripted model
+(`tests/test_real_llm_suite.py`); real-model runs are produced on demand
+through the `real-model-benchmarks` workflow with `suite=v1-v7`. Honest
+limits: V4 (replay) and V5 (origin loss) are not elicitable in this
+two-node harness shape and stay corpus-covered, and the V6 pair is
+classified as V2 at current adapter fidelity (LangGraph exposes no
+tool-call content provenance).
+
 ### Published open-weight results
 
 Two hosted open-weight models were run through the same real LangGraph task
@@ -304,6 +318,7 @@ delegationbench run scenarios/ --defense envelope
 
 Contributions welcome — new attack scenarios are the best first contribution.
 See [CONTRIBUTING.md](https://github.com/sergeyizmailov/DelegationBench/blob/main/CONTRIBUTING.md),
+[GOVERNANCE.md](https://github.com/sergeyizmailov/DelegationBench/blob/main/GOVERNANCE.md),
 [CHANGELOG.md](https://github.com/sergeyizmailov/DelegationBench/blob/main/CHANGELOG.md),
 and the [threat model](https://github.com/sergeyizmailov/DelegationBench/blob/main/THREAT_MODEL.md).
 The parser, envelopes, traces, and oracle are
