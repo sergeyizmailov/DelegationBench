@@ -27,5 +27,10 @@ The harness continues after an individual endpoint failure, records the error
 in the per-run artifact, and exits non-zero after writing the report. Private
 endpoint URLs and API keys are not written to the report.
 
+For a no-download hosted setup, see the reproducible
+[NVIDIA NIM instructions](../docs/nvidia-open-model-benchmarks.md). They use
+two different open-weight model families through one remote development API;
+no model weights are installed locally.
+
 No result file in this directory should contain API keys, private endpoint
 URLs, usernames, or other machine-specific secrets.
