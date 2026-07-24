@@ -1,0 +1,9 @@
+# Real-framework integration job dependencies (test-only).
+# Compiled to requirements-integration.txt (hash-locked) with:
+#   uv pip compile --generate-hashes --universal \
+#       .github/requirements-integration.in -o .github/requirements-integration.txt
+pytest
+PyYAML>=6.0
+langgraph>=1.0,<2
+langchain-core>=1.0,<2
+langchain>=1,<2

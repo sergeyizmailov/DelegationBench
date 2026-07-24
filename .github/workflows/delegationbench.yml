@@ -16,13 +16,19 @@ jobs:
         python-version: ["3.10", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install
-        run: pip install -e . pytest
+        # Hash-locked CI tools (see .github/requirements-ci.in); the package
+        # itself then installs without deps to keep the tool set reproducible.
+        run: |
+          pip install --require-hashes -r .github/requirements-ci.txt
+          pip install --no-deps -e .
       - name: Unit tests
         run: python -m pytest tests/ -q
       - name: Scenario corpus (no defense)
@@ -37,22 +43,29 @@ jobs:
   integration:
     # Real-framework gate: runs the suite with the optional langgraph
     # extra installed so tests/test_integration_langgraph.py executes
-    # (it skips otherwise). Unpinned on purpose — gate langgraph
-    # upgrades on this job (see pyproject.toml [langgraph] comment).
-    # langchain is installed explicitly as a TEST-ONLY dependency: the
-    # integration test builds agents with langchain.agents.create_agent
+    # (it skips otherwise). Framework upgrades flow through the hash-locked
+    # .github/requirements-integration.txt (sources in
+    # .github/requirements-integration.in, same >=1,<2 major-version gate as
+    # pyproject.toml), so every langgraph/langchain bump lands via a visible
+    # lockfile diff and must pass this job. langchain is installed
+    # explicitly as a TEST-ONLY dependency: the integration test builds
+    # agents with langchain.agents.create_agent
     # (langgraph.prebuilt.create_react_agent is deprecated, removed in
     # LangGraph v2). The [langgraph] extra itself stays langgraph-only.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.13"
           cache: pip
       - name: Install
-        run: pip install -e '.[langgraph]' pytest 'langchain>=1,<2'
+        run: |
+          pip install --require-hashes -r .github/requirements-integration.txt
+          pip install --no-deps -e .
       - name: Integration tests (real LangGraph)
         run: python -m pytest tests/ -q
 
@@ -63,13 +76,17 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.13"
           cache: pip
       - name: Install
-        run: pip install -e . jsonschema
+        run: |
+          pip install --require-hashes -r .github/requirements-ci.txt
+          pip install --no-deps -e .
       - name: Generate SARIF
         run: |
           delegationbench run scenarios/ --defense envelope \
@@ -102,6 +119,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:

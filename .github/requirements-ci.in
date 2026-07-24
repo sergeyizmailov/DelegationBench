@@ -1,0 +1,8 @@
+# CI tooling for test, sarif, package, release, and publish jobs.
+# Compiled to requirements-ci.txt (hash-locked) with:
+#   uv pip compile --generate-hashes --universal \
+#       .github/requirements-ci.in -o .github/requirements-ci.txt
+pytest
+jsonschema
+build
+PyYAML>=6.0

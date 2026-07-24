@@ -8,3 +8,13 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+  # Hash-locked CI requirement files under .github/.
+  - package-ecosystem: "pip"
+    directory: "/.github"
+    schedule:
+      interval: "weekly"
+  # ClusterFuzzLite base-image digest in .clusterfuzzlite/Dockerfile.
+  - package-ecosystem: "docker"
+    directory: "/.clusterfuzzlite"
+    schedule:
+      interval: "weekly"
