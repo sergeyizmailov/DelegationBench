@@ -5,6 +5,9 @@
     delegationbench fuzz <seed.yaml>    # fuzz a seed scenario
                                         # (--budget, --seed, --defense,
                                         #  --out, --minimize)
+    delegationbench validate-adapter <trace.json>  # lint a recorded
+                                        # adapter trace (--scenario,
+                                        # --strict, --format)
 
 Exit codes: 0 = actual verdict matches the scenario's baseline expect contract
 and, with a defense active, the derived defense outcome; 1 = mismatch; 2 =
@@ -20,6 +23,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .actions import resolve_actions
 from .agents import EngineError
 from .corpus import resolve_scenario_path
 from .defense import EnvelopeGuard, SigningKeyError, signing_key_from_env
@@ -33,6 +37,9 @@ from .runner import run_scenario
 from .scenario import ScenarioError, load_scenario
 from .tools import ToolError
 from .trace import RunLimitExceeded
+from .tracelint import (ERROR as LINT_ERROR, TraceLintError,
+                        lint_trace, load_trace_document,
+                        render_findings)
 
 EXIT_MATCH = 0
 EXIT_MISMATCH = 1
@@ -103,7 +110,8 @@ def _machine_output(args: argparse.Namespace, reports: list[dict],
             data["errors"] = errors
         return data, False
     if args.format == "junit":
-        return reports_to_junit(reports, errors=errors), True
+        detail = getattr(args, "junit_detail", "full")
+        return reports_to_junit(reports, errors=errors, detail=detail), True
     if args.format == "sarif":
         return reports_to_sarif(reports, paths, errors=errors), False
     return None, False
@@ -132,8 +140,10 @@ def _resolve_or_error(arg: str) -> Path | None:
     """Resolve a CLI path, falling back to the bundled corpus."""
     target, from_bundle = resolve_scenario_path(arg)
     if target is not None and from_bundle:
-        print(f"note: {arg} not found locally; using the bundled "
-              f"scenario corpus ({target})", file=sys.stderr)
+        print(f"note: '{arg}' does not exist in the current directory; "
+              f"running the DelegationBench corpus bundled with the "
+              f"package ({target}). Pass a path to your own scenarios to "
+              f"evaluate those instead.", file=sys.stderr)
     return target
 
 
@@ -197,6 +207,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
                     rows, show_defense=args.defense != "none")
                 + "\n\n" + render_metrics(metrics)
             )
+            matched = sum(r["ok"] for r in rows)
+            rendered += (
+                f"\n\nCorpus contract validation: {matched}/{len(rows)} "
+                "scenario contracts matched. This is a deterministic "
+                "contract check of declared expectations, not a "
+                "real-model detection rate. Unauthorized-action metrics "
+                "distinguish attempted from executed violations (see "
+                "above).")
             _emit(rendered, output=args.output, text=True)
         _write_benchmark_report(args, reports, metrics)
         if errors:
@@ -253,6 +271,53 @@ def _cmd_fuzz(args: argparse.Namespace) -> int:
     return EXIT_MATCH
 
 
+def _cmd_validate_adapter(args: argparse.Namespace) -> int:
+    """Lint a recorded adapter trace; fail on ambiguous traces.
+
+    Exit 2: unreadable input or scenario errors. Exit 1: any
+    error-severity finding, or any finding at all under --strict.
+    """
+    try:
+        doc = load_trace_document(args.trace)
+    except TraceLintError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return EXIT_ERROR
+
+    actions: frozenset[str] = frozenset()
+    root_principal = ""
+    if args.scenario:
+        scenario_path = _resolve_or_error(args.scenario)
+        if scenario_path is None:
+            print(f"error: no such file: {args.scenario}",
+                  file=sys.stderr)
+            return EXIT_ERROR
+        try:
+            scn = load_scenario(scenario_path)
+        except ScenarioError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return EXIT_ERROR
+        actions = resolve_actions(scn.actions) | scn.grant.allowed_actions
+        root_principal = scn.principal
+
+    findings = lint_trace(doc, actions=actions,
+                          root_principal=root_principal)
+    errors = sum(f.severity == LINT_ERROR for f in findings)
+    if args.format == "json":
+        payload = {
+            "trace": str(args.trace),
+            "strict": bool(args.strict),
+            "errors": errors,
+            "warnings": len(findings) - errors,
+            "findings": [f.to_dict() for f in findings],
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(render_findings(findings, str(args.trace)))
+    if errors or (args.strict and findings):
+        return EXIT_MISMATCH
+    return EXIT_MATCH
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="delegationbench",
@@ -273,6 +338,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--benchmark-report",
         help="also write a self-describing versioned JSON benchmark report",
     )
+    run.add_argument(
+        "--junit-detail", choices=("summary", "failures", "full"),
+        default="full",
+        help="how much detail JUnit system-out carries: 'full' embeds the "
+             "complete JSON report per testcase (default, historical "
+             "behavior), 'failures' embeds it only for mismatched "
+             "scenarios, 'summary' omits system-out entirely. Full "
+             "per-scenario traces stay available via --format json")
     run.add_argument("--defense", choices=("none", "envelope",
                                            "envelope-sign"),
                      default="none",
@@ -307,6 +380,25 @@ def build_parser() -> argparse.ArgumentParser:
                            "bypass (for CI gating; default: exit 0 "
                            "regardless of findings)")
     fuzz.set_defaults(func=_cmd_fuzz)
+
+    lint = sub.add_parser(
+        "validate-adapter",
+        help="lint a recorded adapter trace for misconfiguration "
+             "(missing mappings, broken delegation links, dropped "
+             "principals) before the oracle judges it")
+    lint.add_argument("trace",
+                      help="trace JSON file (the shape produced by "
+                           "Trace.to_json() / adapter build_trace())")
+    lint.add_argument("--scenario",
+                      help="optional scenario .yaml: checks tool actions "
+                           "against its action vocabulary and principal "
+                           "against its grant")
+    lint.add_argument("--strict", action="store_true",
+                      help="fail on warnings too, not only errors "
+                           "(ambiguous or incomplete traces fail)")
+    lint.add_argument("--format", choices=("terminal", "json"),
+                      default="terminal")
+    lint.set_defaults(func=_cmd_validate_adapter)
     return parser
 
 
