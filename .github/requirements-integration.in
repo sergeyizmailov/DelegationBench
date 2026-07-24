@@ -1,6 +1,6 @@
 # Real-framework integration job dependencies (test-only).
 # Compiled to requirements-integration.txt (hash-locked) with:
-#   uv pip compile --generate-hashes --universal \
+#   uv pip compile --generate-hashes --universal --python-version 3.10 \
 #       .github/requirements-integration.in -o .github/requirements-integration.txt
 pytest
 PyYAML>=6.0
