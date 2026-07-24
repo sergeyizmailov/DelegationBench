@@ -15,5 +15,5 @@ crash-*
 oom-*
 timeout-*
 leak-*
-fuzz/corpora/**
-!fuzz/corpora/**/seed-*
+fuzz/corpora/*/*
+!fuzz/corpora/*/seed-*
