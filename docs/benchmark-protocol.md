@@ -20,6 +20,10 @@ Each published model and configuration must record:
 Private endpoint URLs, API keys, usernames, and other machine-specific secrets
 must not appear in committed reports.
 
+When a hosted provider does not disclose the exact weight revision, serving
+version, or hardware, record that limitation explicitly. Do not substitute an
+upstream repository revision that the provider has not confirmed it serves.
+
 ## Minimum run size
 
 A publishable configuration must include at least:
@@ -78,3 +82,6 @@ python examples/langgraph_real_llm_demo.py \
 
 The harness records individual endpoint failures, writes the report, and exits
 non-zero when errors occurred so CI cannot silently accept incomplete evidence.
+
+For NVIDIA's hosted open-weight development endpoint, use the
+[provider-specific reproduction guide](nvidia-open-model-benchmarks.md).
