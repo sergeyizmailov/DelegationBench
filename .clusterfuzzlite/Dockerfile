@@ -1,6 +1,6 @@
 # ClusterFuzzLite build image for DelegationBench fuzz targets.
 # Base image digest pinned for reproducible builds; Dependabot tracks it.
-FROM gcr.io/oss-fuzz-base/base-builder-python@sha256:662ca248430ff29e82f3505caa17e3b75f118243a41cfa42ae64fd24ef6365f0
+FROM gcr.io/oss-fuzz-base/base-builder-python@sha256:7c97d379ceb773b0bd345f0ced72b037d26e9bb6c4a0c9a176525e65975c5694
 
 COPY . $SRC/delegationbench
 WORKDIR $SRC/delegationbench
